@@ -1,6 +1,5 @@
 node_modules/
 dumps/
-viewer.html
 analysis.md
 test-parser.js
 medal_to_str.json
