@@ -920,7 +920,7 @@
         var titleH = 60;
         var footerH = 30;
         var colGap = 16;
-        var cols = [34, 250, 54, 34, 60, 50, 40, 60];
+        var cols = [34, 250, 54, 34, 60, 50, 60];
         var tableW = 0;
         for (var ci = 0; ci < cols.length; ci++) tableW += cols[ci];
         tableW += 16;
@@ -959,7 +959,7 @@
         ctx.font = '11px Segoe UI, sans-serif';
         ctx.fillText('Top 50 Charts', textLeft, 48);
 
-        var headers = ['#', 'Genre / Title', 'Diff', 'Lv', 'Score', 'Medal', 'Rank', 'Pts'];
+        var headers = ['#', 'Genre / Title', 'Diff', 'Lv', 'Score', 'Medal', 'Pts'];
 
         function drawTable(startIdx, endIdx, offsetX) {
             var y = titleH;
@@ -1008,10 +1008,6 @@
                 ctx.fillStyle = MEDAL_COLORS[c.medal] || '#907860';
                 ctx.fillText(MEDAL_LABELS[c.medal] || c.medal || '-', x, y + 19);
                 x += cols[5];
-
-                ctx.fillStyle = '#3d2b1f';
-                ctx.fillText(c.rank || '-', x, y + 19);
-                x += cols[6];
 
                 ctx.fillStyle = '#e94560';
                 ctx.fillText(c.pts.toFixed(2), x, y + 19);
