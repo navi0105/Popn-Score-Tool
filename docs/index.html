@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pop'n Score Tool</title>
+<style>
+:root {
+  --bg: #fef6f0; --bg2: #fff0ea; --bg3: #ffe0d0; --border: #f0c8b0;
+  --text: #3d2b1f; --text2: #907860; --accent: #e94560;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Segoe UI', 'Noto Sans JP', sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6;
+}
+.container { max-width: 720px; margin: 0 auto; padding: 40px 20px; }
+h1 { color: var(--accent); font-size: 32px; margin-bottom: 4px; }
+.subtitle { color: var(--text2); font-size: 14px; margin-bottom: 32px; }
+h2 { font-size: 18px; margin: 32px 0 12px 0; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+p, li { font-size: 15px; margin-bottom: 8px; }
+ol { padding-left: 24px; }
+ol li { margin-bottom: 12px; }
+code {
+  background: var(--bg3); border-radius: 4px; padding: 2px 6px;
+  font-size: 13px; font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.install-box {
+  background: var(--bg2); border: 2px dashed var(--border); border-radius: 12px;
+  padding: 24px; text-align: center; margin: 20px 0;
+}
+.install-box p { color: var(--text2); font-size: 13px; margin-top: 8px; }
+.bookmarklet-link {
+  display: inline-block; padding: 12px 28px; border-radius: 8px;
+  background: var(--accent); color: #fff; font-size: 16px; font-weight: bold;
+  text-decoration: none; cursor: grab; user-select: none;
+  box-shadow: 0 2px 8px rgba(233, 69, 96, 0.3);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.bookmarklet-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(233, 69, 96, 0.4);
+}
+.bookmarklet-link:active { cursor: grabbing; transform: translateY(0); }
+
+.note {
+  background: var(--bg3); border-radius: 8px; padding: 16px;
+  font-size: 13px; color: var(--text2); margin: 16px 0;
+}
+.note b { color: var(--text); }
+
+.features { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+.feature {
+  flex: 1; min-width: 140px; background: var(--bg2); border-radius: 8px;
+  padding: 12px; font-size: 13px; border: 1px solid var(--border);
+}
+.feature b { display: block; margin-bottom: 4px; color: var(--text); }
+
+footer {
+  margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--text2); text-align: center;
+}
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+.manual-toggle {
+  font-size: 13px; color: var(--accent); cursor: pointer;
+  text-decoration: underline; display: inline-block; margin-top: 12px;
+}
+.manual-section { display: none; margin-top: 12px; }
+.manual-section.open { display: block; }
+.manual-section textarea {
+  width: 100%; height: 60px; font-size: 11px;
+  font-family: 'Consolas', monospace; padding: 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg2); color: var(--text); resize: vertical;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Pop'n Score Tool</h1>
+  <p class="subtitle">pop'n music Jam&Fizz score exporter</p>
+
+  <div class="features">
+    <div class="feature"><b>Score Scraping</b>Fetch scores, medals & ranks for all charts</div>
+    <div class="feature"><b>Pop'n Class</b>Calculate your class rating from Top 50 charts</div>
+    <div class="feature"><b>Export HTML</b>Offline viewer with sortable score browser</div>
+    <div class="feature"><b>Export Image</b>Shareable Pop'n Class Top 50 PNG</div>
+  </div>
+
+  <h2>Install</h2>
+  <div class="install-box">
+    <a class="bookmarklet-link" id="bookmarkletLink" href="#">Pop'n Score Tool</a>
+    <p>Drag this button to your <b>Bookmarks Bar</b></p>
+  </div>
+
+  <div class="note">
+    <b>Bookmarks Bar not visible?</b>
+    Press <code>Ctrl+Shift+B</code> (Windows/Linux) or <code>Cmd+Shift+B</code> (Mac) to show it.
+  </div>
+
+  <span class="manual-toggle" id="manualToggle">Manual installation</span>
+  <div class="manual-section" id="manualSection">
+    <p>If drag-and-drop doesn't work, create a new bookmark manually and paste this as the URL:</p>
+    <textarea id="manualCode" readonly onclick="this.select()"></textarea>
+  </div>
+
+  <h2>Usage</h2>
+  <ol>
+    <li>Log in to <a href="https://p.eagate.573.jp/game/popn/jamfizz/index.html" target="_blank" style="color:var(--accent)">Jam&Fizz on e-amusement</a> (requires Basic Course)</li>
+    <li>Click <b>Pop'n Score Tool</b> in your bookmarks bar</li>
+    <li>Click <b>Scrape</b> to fetch your scores</li>
+    <li>Click <b>Export HTML</b> for an offline viewer, or <b>Export Image</b> for a shareable PNG</li>
+  </ol>
+
+  <footer>
+    <a id="repoLink" href="#">GitHub</a>
+  </footer>
+</div>
+
+<script>
+(function() {
+  // Derive URLs from GitHub Pages hostname: {user}.github.io/{repo}/
+  var host = window.location.hostname;
+  var path = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
+  var match = host.match(/^([^.]+)\.github\.io$/);
+
+  var jsUrl;
+  var repoUrl;
+  if (match) {
+    var user = match[1];
+    var repo = path.split('/')[1] || '';
+    jsUrl = window.location.origin + path + '/bookmarklet.min.js';
+    repoUrl = 'https://github.com/' + user + '/' + repo;
+  } else {
+    // Local testing / custom domain fallback
+    jsUrl = window.location.href.replace(/[^/]*$/, '') + 'bookmarklet.min.js';
+    repoUrl = '#';
+  }
+
+  // Build loader bookmarklet
+  var loader = "javascript:void(fetch('" + jsUrl + "').then(function(r){return r.text()}).then(function(c){eval(c)}).catch(function(e){alert('Load failed: '+e)}))";
+
+  document.getElementById('bookmarkletLink').href = loader;
+  document.getElementById('manualCode').value = loader;
+  document.getElementById('repoLink').href = repoUrl;
+
+  // Manual toggle
+  document.getElementById('manualToggle').addEventListener('click', function() {
+    var sec = document.getElementById('manualSection');
+    sec.classList.toggle('open');
+    this.textContent = sec.classList.contains('open') ? 'Hide manual installation' : 'Manual installation';
+  });
+
+  // Prevent click navigation (should only be dragged)
+  document.getElementById('bookmarkletLink').addEventListener('click', function(e) {
+    e.preventDefault();
+    alert('Drag this button to your Bookmarks Bar to install.');
+  });
+})();
+</script>
+</body>
+</html>

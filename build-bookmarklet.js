@@ -49,6 +49,12 @@ console.log(`Original: ${source.length} chars`);
 console.log(`Minified: ${minified.length} chars`);
 console.log(`URI:      ${bookmarklet.length} chars`);
 
-// Write to file
+// Write self-contained bookmarklet URI (for manual installation)
 fs.writeFileSync(path.join(__dirname, 'bookmarklet.min.txt'), bookmarklet);
 console.log('\nSaved to bookmarklet.min.txt');
+
+// Write decoded JS (for hosted loader via GitHub Pages)
+const docsDir = path.join(__dirname, 'docs');
+if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir);
+fs.writeFileSync(path.join(docsDir, 'bookmarklet.min.js'), minified);
+console.log('Saved to docs/bookmarklet.min.js');
