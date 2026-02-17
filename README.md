@@ -15,26 +15,24 @@ A client-side bookmarklet that scrapes your [pop'n music Jam&Fizz](https://p.eag
 
 ## Usage
 
-### 1. Build the bookmarklet
+### Quick Install
 
-```sh
-node build-bookmarklet.js
-```
+Visit the **[installation page](https://navi0105.github.io/popn-score-tool/)** and drag the button to your Bookmarks Bar. That's it!
 
-This outputs `bookmarklet.min.txt` containing a `javascript:` URI.
-A pre-built `bookmarklet.min.txt` is included in this repo if you prefer to skip this step.
-
-### 2. Create a bookmark
-
-1. Copy the contents of `bookmarklet.min.txt`
-2. Create a new bookmark in your browser and paste it as the URL
-
-### 3. Run
+### Run
 
 1. Log in to the [Jam&Fizz page on e-amusement](https://p.eagate.573.jp/game/popn/jamfizz/index.html) (requires Basic Course)
-2. Click the bookmark on any Jam&Fizz page (the homepage is recommended)
+2. Click **Pop'n Score Tool** in your bookmarks bar
 3. Click **Scrape** to start fetching your scores
 4. When finished, click **Export HTML** to get your offline viewer, or **Export Image** to get a shareable PNG
+
+### Manual Install
+
+If you prefer not to use the hosted loader:
+
+1. Run `node build-bookmarklet.js` (or use the pre-built `bookmarklet.min.txt`)
+2. Copy the contents of `bookmarklet.min.txt`
+3. Create a new bookmark in your browser and paste it as the URL
 
 ## Files
 
@@ -44,6 +42,8 @@ A pre-built `bookmarklet.min.txt` is included in this repo if you prefer to skip
 | `viewer-template.html` | HTML viewer template (embedded into bookmarklet at build time) |
 | `build-bookmarklet.js` | Build script: minifies bookmarklet + embeds viewer template |
 | `build-viewer.js` | Dev tool: embeds a JSON file into the viewer template for local testing |
+| `docs/index.html` | GitHub Pages installation page |
+| `docs/bookmarklet.min.js` | Built JS loaded by the hosted bookmarklet (auto-generated) |
 
 ## Future Works
 
