@@ -17,7 +17,7 @@ A client-side bookmarklet that scrapes your [pop'n music Jam&Fizz](https://p.eag
 
 ### Quick Install
 
-Visit the **[installation page](https://navi0105.github.io/popn-score-tool/)** and drag the button to your Bookmarks Bar. That's it!
+Visit the **[installation page](https://navi0105.github.io/Popn-Score-Tool/)** and drag the button to your Bookmarks Bar. That's it!
 
 ### Run
 
