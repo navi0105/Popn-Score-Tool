@@ -138,10 +138,10 @@ table.data-table tr:hover td { background: var(--bg3); }
   width: 160px;
 }
 
-/* Clear lamp stats */
-.lamp-wrap { overflow-x: auto; }
-.lamp-table th, .lamp-table td { text-align: center; padding: 4px 8px; font-size: 12px; }
-.lamp-table { font-size: 12px; }
+/* Clear lamp / rank stats */
+.lamp-wrap { overflow-x: auto; max-width: 100%; }
+.lamp-table th, .lamp-table td { text-align: center; padding: 4px 1px; font-size: 12px; white-space: nowrap; }
+.lamp-table { font-size: 12px; width: auto; overflow: visible; }
 .lamp-noplay { color: #bbb; }
 .lamp-failed { color: #d04040; }
 .lamp-easy-clear { color: #2ea060; }
@@ -647,7 +647,7 @@ renderScoreTable();
 // === Rank Lamp Stats ===
 (function() {
   var RANK_DISPLAY = [null, 'E', 'D', 'C', 'B', 'A', 'AA', 'AAA', 'S'];
-  var RANK_LABELS = ['-', 'E', 'D', 'C', 'B', 'A', 'AA', 'AAA', 'S'];
+  var RANK_LABELS = ['No Play', 'E', 'D', 'C', 'B', 'A', 'AA', 'AAA', 'S'];
 
   // Build header
   var headerRow = document.getElementById('rankHeader');
