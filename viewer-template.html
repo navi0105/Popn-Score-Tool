@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pop'n Score Tool</title>
+<style>
+:root {
+  --bg: #fef6f0;
+  --bg2: #fff0ea;
+  --bg3: #ffe0d0;
+  --border: #f0c8b0;
+  --text: #3d2b1f;
+  --text2: #907860;
+  --accent: #e94560;
+  --accent2: #2ecc71;
+  --blue: #4a8fe7;
+  --purple: #b06ce0;
+  --yellow: #e0900a;
+  --easy: #1ea868;
+  --normal: #2e7ed6;
+  --hyper: #d08a10;
+  --ex: #d04030;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Segoe UI', 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+h1 { color: var(--accent); font-size: 28px; }
+h2 { color: var(--text); font-size: 18px; margin: 0 0 12px 0; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+
+/* Header / Player info */
+.header { display: flex; align-items: center; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
+.header h1 { flex-shrink: 0; }
+.player-info { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.player-info .tag {
+  background: var(--bg3); border-radius: 6px; padding: 4px 12px;
+  font-size: 13px; color: var(--text2);
+}
+.player-info .tag b { color: var(--text); }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+.tab {
+  padding: 8px 20px; border: none; border-radius: 6px 6px 0 0;
+  background: var(--bg2); color: var(--text2); cursor: pointer;
+  font-size: 14px; font-family: inherit;
+}
+.tab:hover { color: var(--text); }
+.tab.active { background: var(--bg3); color: var(--accent); border-bottom: 2px solid var(--accent); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Pop Class card */
+.popclass-card {
+  background: linear-gradient(135deg, var(--bg2), var(--bg3));
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 24px; margin-bottom: 24px; text-align: center;
+}
+.popclass-value { font-size: 64px; font-weight: bold; color: var(--accent); line-height: 1.1; }
+.popclass-tier { font-size: 24px; color: var(--yellow); margin: 4px 0; }
+.popclass-bar-wrap {
+  width: 300px; max-width: 100%; height: 8px; background: var(--bg);
+  border-radius: 4px; margin: 12px auto; overflow: hidden;
+}
+.popclass-bar { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.5s; }
+.popclass-sub { font-size: 13px; color: var(--text2); }
+
+/* Top 50 two-column */
+.top50-section { margin-bottom: 24px; }
+.top50-flex { display: flex; gap: 20px; flex-wrap: wrap; }
+.top50-flex > div { flex: 1; min-width: 400px; }
+.export-btn {
+  padding: 6px 16px; border: none; border-radius: 6px;
+  background: var(--accent2); color: #fff; cursor: pointer;
+  font-size: 13px; font-family: inherit; margin-bottom: 12px;
+}
+.export-btn:hover { opacity: 0.8; }
+
+/* Tables */
+table.data-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+  background: var(--bg2); border-radius: 8px; overflow: hidden;
+}
+table.data-table th {
+  background: var(--bg3); padding: 8px 10px; text-align: left;
+  font-weight: 600; color: var(--text2); cursor: pointer; user-select: none;
+  white-space: nowrap; border-bottom: 1px solid var(--border);
+}
+table.data-table th:hover { color: var(--text); }
+table.data-table th .sort-arrow { font-size: 10px; margin-left: 4px; }
+table.data-table td {
+  padding: 6px 10px; border-bottom: 1px solid var(--border);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px;
+}
+table.data-table tr:hover td { background: var(--bg3); }
+.diff-easy { color: var(--easy); }
+.diff-normal { color: var(--normal); }
+.diff-hyper { color: var(--hyper); }
+.diff-ex { color: var(--ex); }
+.medal-cell { font-size: 11px; }
+.score-cell { font-family: 'Consolas', monospace; }
+
+/* Filters */
+.filters {
+  display: flex; gap: 16px; align-items: flex-start; margin-bottom: 12px;
+  flex-wrap: wrap; font-size: 13px;
+}
+.filter-group { margin-bottom: 8px; }
+.filter-group .filter-label { color: var(--text2); margin-bottom: 4px; font-weight: 600; }
+.filter-group .filter-opts {
+  display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
+}
+.filter-group .filter-opts label {
+  display: flex; align-items: center; gap: 2px;
+  background: var(--bg3); border-radius: 4px; padding: 2px 8px;
+  cursor: pointer; font-size: 12px; color: var(--text);
+  border: 1px solid var(--border); user-select: none;
+}
+.filter-group .filter-opts label:hover { border-color: var(--text2); }
+.filter-group .filter-opts label.checked { border-color: var(--accent); background: #fde8e8; }
+.filter-group .filter-opts input[type="checkbox"] { display: none; }
+.filter-group .toggle-link {
+  font-size: 11px; color: var(--blue); cursor: pointer; margin-left: 4px;
+  text-decoration: underline;
+}
+.filter-search {
+  padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg3); color: var(--text); font-size: 13px; font-family: inherit;
+  width: 160px;
+}
+
+/* Clear lamp stats */
+.lamp-wrap { overflow-x: auto; }
+.lamp-table th, .lamp-table td { text-align: center; padding: 4px 8px; font-size: 12px; }
+.lamp-table { font-size: 12px; }
+.lamp-noplay { color: #bbb; }
+.lamp-failed { color: #d04040; }
+.lamp-easy-clear { color: #2ea060; }
+.lamp-clear { color: #208020; }
+.lamp-fc { color: #c0a000; }
+.lamp-perfect { color: #d050d0; }
+
+/* Footer */
+.footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text2); text-align: center; }
+
+/* Canvas for image export (hidden) */
+#exportCanvas { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <h1>Pop'n Score Tool</h1>
+    <div class="player-info" id="playerInfo"></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="popclass">Pop'n Class</button>
+    <button class="tab" data-tab="scores">Score Browser</button>
+    <button class="tab" data-tab="lamps">Clear Lamp Stats</button>
+    <button class="tab" data-tab="ranks">Rank Stats</button>
+  </div>
+
+  <!-- Pop Class Panel -->
+  <div class="tab-panel active" id="panel-popclass">
+    <div class="popclass-card" id="popclassCard"></div>
+    <div class="top50-section">
+      <h2>Top 50 Charts</h2>
+      <button class="export-btn" id="btnExportImg">Export as Image</button>
+      <div class="top50-flex" id="top50Flex"></div>
+    </div>
+  </div>
+
+  <!-- Score Browser Panel -->
+  <div class="tab-panel" id="panel-scores">
+    <div class="filters" id="filtersContainer"></div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px;" id="scoreCount"></div>
+    <table class="data-table" id="scoreTable">
+      <thead>
+        <tr>
+          <th data-sort="title">Genre / Title</th>
+          <th data-sort="artist">Artist</th>
+          <th data-sort="diff">Diff</th>
+          <th data-sort="level">Lv</th>
+          <th data-sort="score">Score</th>
+          <th data-sort="medal">Medal</th>
+          <th data-sort="rank">Rank</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Clear Lamp Stats Panel -->
+  <div class="tab-panel" id="panel-lamps">
+    <h2>Clear Lamp per Level</h2>
+    <div class="lamp-wrap">
+      <table class="data-table lamp-table" id="lampTable">
+        <thead><tr id="lampHeader"></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Rank Stats Panel -->
+  <div class="tab-panel" id="panel-ranks">
+    <h2>Rank per Level</h2>
+    <div class="lamp-wrap">
+      <table class="data-table lamp-table" id="rankTable">
+        <thead><tr id="rankHeader"></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    Pop'n Score Tool &mdash; generated <span id="exportDate"></span>
+  </div>
+</div>
+
+<canvas id="exportCanvas"></canvas>
+
+<script>
+// === Embedded data (replaced by build script) ===
+var DATA = {{DATA_PLACEHOLDER}};
+
+// === Constants ===
+var CLASS_TIERS = [
+  { min: 91, name: '\u795e', color: '#d0203a' },
+  { min: 79, name: '\u4ed9\u4eba', color: '#c03050' },
+  { min: 68, name: '\u5c06\u8ecd', color: '#c08020' },
+  { min: 59, name: '\u30a2\u30a4\u30c9\u30eb', color: '#b0a010' },
+  { min: 46, name: '\u5211\u4e8b', color: '#209040' },
+  { min: 34, name: '\u756a\u9577', color: '#1a9080' },
+  { min: 21, name: '\u5c0f\u5b66\u751f', color: '#2e70c0' },
+  { min: 0, name: '\u306b\u3083\u3093\u3053', color: '#907860' },
+];
+
+var MEDAL_ORDER = [
+  'no_play',
+  'failed_1', 'failed_2', 'failed_3',
+  'easy_clear',
+  'normal_clear', 'normal_clear_in_20_bad', 'normal_clear_in_5_bad',
+  'full_combo', 'full_combo_in_20_good', 'full_combo_in_5_good',
+  'perfect'
+];
+
+var MEDAL_LABELS = {
+  'no_play': 'No Play', 'easy_clear': '\u7dd1\u2b24',
+  'failed_1': '\u7070\u2b24', 'failed_2': '\u7070\u25c6', 'failed_3': '\u7070\u2605',
+  'normal_clear': '\u9285\u2b24', 'normal_clear_in_20_bad': '\u9285\u25c6', 'normal_clear_in_5_bad': '\u9285\u2605',
+  'full_combo': '\u9280\u2b24', 'full_combo_in_20_good': '\u9280\u25c6', 'full_combo_in_5_good': '\u9280\u2605',
+  'perfect': '\u91d1\u2605'
+};
+
+var MEDAL_COLORS = {
+  'no_play': '#bbb', 'easy_clear': '#2ea868',
+  'failed_1': '#999', 'failed_2': '#999', 'failed_3': '#999',
+  'normal_clear': '#b87333', 'normal_clear_in_20_bad': '#b87333', 'normal_clear_in_5_bad': '#b87333',
+  'full_combo': '#888', 'full_combo_in_20_good': '#888', 'full_combo_in_5_good': '#888',
+  'perfect': '#d4a017'
+};
+
+var DIFF_COLORS = { easy: '#1ea868', normal: '#2e7ed6', hyper: '#d08a10', ex: '#d04030' };
+
+var RANK_ORDER = ['E', 'D', 'C', 'B', 'A', 'AA', 'AAA', 'S'];
+
+// === Pop Class Calculation ===
+function medalBonus(medal) {
+  if (!medal) return 0;
+  if (medal === 'easy_clear' || medal.indexOf('normal_clear') === 0) return 3000;
+  if (medal.indexOf('full_combo') === 0 || medal === 'perfect') return 5000;
+  return 0;
+}
+
+function calcClassPoints(lv, score, medal) {
+  if (!score || score < 50000) return 0;
+  var raw = (10000 * lv + score - 50000 + medalBonus(medal)) / 5440;
+  return Math.min(Math.round(raw * 100) / 100, 100);
+}
+
+function getTier(value) {
+  for (var i = 0; i < CLASS_TIERS.length; i++) {
+    if (value >= CLASS_TIERS[i].min) return CLASS_TIERS[i];
+  }
+  return CLASS_TIERS[CLASS_TIERS.length - 1];
+}
+
+function getNextTier(value) {
+  for (var i = CLASS_TIERS.length - 1; i >= 0; i--) {
+    if (CLASS_TIERS[i].min > value) return CLASS_TIERS[i];
+  }
+  return null;
+}
+
+// === Flatten scores into per-chart rows ===
+var allCharts = [];
+(function() {
+  var scores = DATA.scores || [];
+  for (var si = 0; si < scores.length; si++) {
+    var song = scores[si];
+    var charts = song.charts || {};
+    var diffs = ['easy', 'normal', 'hyper', 'ex'];
+    for (var di = 0; di < diffs.length; di++) {
+      var d = diffs[di];
+      if (!charts[d]) continue;
+      var c = charts[d];
+      allCharts.push({
+        title: song.title,
+        genre: song.genre,
+        artist: song.artist,
+        diff: d,
+        level: c.level || 0,
+        score: c.score || 0,
+        medal: c.medal || 'no_play',
+        rank: c.rank || null,
+        classPoints: calcClassPoints(c.level || 0, c.score || 0, c.medal),
+      });
+    }
+  }
+})();
+
+// === Calculate Pop Class ===
+var top50Charts = [];
+var popClassValue = 0;
+(function() {
+  var sorted = allCharts.slice().sort(function(a, b) { return b.classPoints - a.classPoints; });
+  top50Charts = sorted.slice(0, 50);
+  var sum = 0;
+  for (var i = 0; i < top50Charts.length; i++) sum += top50Charts[i].classPoints;
+  popClassValue = top50Charts.length > 0 ? Math.round((sum / Math.min(top50Charts.length, 50)) * 100) / 100 : 0;
+})();
+
+// === Render Player Info ===
+(function() {
+  var p = DATA.player || {};
+  var info = document.getElementById('playerInfo');
+  var tags = [];
+  if (p['\u30d7\u30ec\u30fc\u30e4\u30fc\u540d']) tags.push('<b>' + esc(p['\u30d7\u30ec\u30fc\u30e4\u30fc\u540d']) + '</b>');
+  if (p['\u30dd\u30d7\u3068\u3082ID']) tags.push('ID: ' + esc(p['\u30dd\u30d7\u3068\u3082ID']));
+  if (p['NORMAL\u30e2\u30fc\u30c9\u30d7\u30ec\u30fc\u6570']) tags.push('Plays: ' + esc(p['NORMAL\u30e2\u30fc\u30c9\u30d7\u30ec\u30fc\u6570']));
+  if (p['\u6700\u7d42\u30d7\u30ec\u30fc\u65e5\u6642']) tags.push('Last: ' + esc(p['\u6700\u7d42\u30d7\u30ec\u30fc\u65e5\u6642']));
+  info.innerHTML = tags.map(function(t) { return '<span class="tag">' + t + '</span>'; }).join('');
+  document.getElementById('exportDate').textContent = DATA.exportedAt || '';
+})();
+
+// === Render Pop Class Card ===
+(function() {
+  var card = document.getElementById('popclassCard');
+  var tier = getTier(popClassValue);
+  var next = getNextTier(popClassValue);
+  var progress = 100;
+  var progressLabel = 'MAX';
+  if (next) {
+    progress = ((popClassValue - tier.min) / (next.min - tier.min)) * 100;
+    progressLabel = 'Next: ' + next.name + ' (' + next.min.toFixed(2) + ')';
+  }
+  card.innerHTML =
+    '<div class="popclass-value" style="color:' + tier.color + '">' + popClassValue.toFixed(2) + '</div>' +
+    '<div class="popclass-tier" style="color:' + tier.color + '">' + tier.name + '</div>' +
+    '<div class="popclass-bar-wrap"><div class="popclass-bar" style="width:' + Math.min(progress, 100) + '%;background:' + tier.color + '"></div></div>' +
+    '<div class="popclass-sub">' + progressLabel + ' | Top 50 avg of ' + allCharts.filter(function(c){return c.classPoints>0;}).length + ' scored charts</div>';
+})();
+
+// === Render Top 50 Table (two columns) ===
+(function() {
+  var flex = document.getElementById('top50Flex');
+  var half = Math.min(top50Charts.length, 25);
+
+  function buildTable(start, end) {
+    var html = '<table class="data-table"><thead><tr>' +
+      '<th>#</th><th>Genre / Title</th><th>Diff</th><th>Lv</th>' +
+      '<th>Score</th><th>Medal</th><th>Rank</th><th>Class Pts</th>' +
+      '</tr></thead><tbody>';
+    for (var i = start; i < end; i++) {
+      var c = top50Charts[i];
+      html += '<tr>' +
+        '<td>' + (i + 1) + '</td>' +
+        '<td title="' + esc(c.artist) + '">' + esc(displayTitle(c.title, c.genre)) + '</td>' +
+        '<td class="diff-' + c.diff + '">' + c.diff.toUpperCase() + '</td>' +
+        '<td>' + c.level + '</td>' +
+        '<td class="score-cell">' + (c.score > 0 ? c.score : '-') + '</td>' +
+        '<td class="medal-cell" style="color:' + (MEDAL_COLORS[c.medal] || '#555') + '">' + (MEDAL_LABELS[c.medal] || c.medal) + '</td>' +
+        '<td>' + (c.rank || '-') + '</td>' +
+        '<td class="score-cell" style="color:var(--accent)">' + c.classPoints.toFixed(2) + '</td>' +
+        '</tr>';
+    }
+    html += '</tbody></table>';
+    return html;
+  }
+
+  var leftDiv = document.createElement('div');
+  leftDiv.innerHTML = buildTable(0, half);
+  flex.appendChild(leftDiv);
+
+  if (top50Charts.length > 25) {
+    var rightDiv = document.createElement('div');
+    rightDiv.innerHTML = buildTable(25, top50Charts.length);
+    flex.appendChild(rightDiv);
+  }
+})();
+
+// === Score Browser ===
+var scoreSort = { key: 'level', dir: -1 };
+
+// Build checkbox filters
+(function() {
+  var container = document.getElementById('filtersContainer');
+
+  // Difficulty checkboxes
+  var diffGroup = document.createElement('div');
+  diffGroup.className = 'filter-group';
+  diffGroup.innerHTML = '<div class="filter-label">Difficulty</div><div class="filter-opts" id="filterDiffOpts"></div>';
+  container.appendChild(diffGroup);
+  var diffOpts = document.getElementById('filterDiffOpts');
+  ['easy','normal','hyper','ex'].forEach(function(d) {
+    var lbl = document.createElement('label');
+    lbl.className = 'checked';
+    lbl.innerHTML = '<input type="checkbox" checked data-diff="' + d + '"> <span class="diff-' + d + '">' + d.toUpperCase() + '</span>';
+    lbl.querySelector('input').addEventListener('change', function() {
+      lbl.className = this.checked ? 'checked' : '';
+      renderScoreTable();
+    });
+    diffOpts.appendChild(lbl);
+  });
+
+  // Level checkboxes
+  var lvGroup = document.createElement('div');
+  lvGroup.className = 'filter-group';
+  lvGroup.innerHTML = '<div class="filter-label">Level <span class="toggle-link" id="lvAll">All</span> <span class="toggle-link" id="lvNone">None</span></div><div class="filter-opts" id="filterLvOpts"></div>';
+  container.appendChild(lvGroup);
+  var lvOpts = document.getElementById('filterLvOpts');
+  for (var i = 1; i <= 50; i++) {
+    var lbl = document.createElement('label');
+    lbl.className = 'checked';
+    lbl.innerHTML = '<input type="checkbox" checked data-lv="' + i + '"> ' + i;
+    lbl.querySelector('input').addEventListener('change', function() {
+      this.parentElement.className = this.checked ? 'checked' : '';
+      renderScoreTable();
+    });
+    lvOpts.appendChild(lbl);
+  }
+  document.getElementById('lvAll').addEventListener('click', function() {
+    lvOpts.querySelectorAll('input').forEach(function(cb) { cb.checked = true; cb.parentElement.className = 'checked'; });
+    renderScoreTable();
+  });
+  document.getElementById('lvNone').addEventListener('click', function() {
+    lvOpts.querySelectorAll('input').forEach(function(cb) { cb.checked = false; cb.parentElement.className = ''; });
+    renderScoreTable();
+  });
+
+  // Medal checkboxes
+  var medalGroup = document.createElement('div');
+  medalGroup.className = 'filter-group';
+  medalGroup.innerHTML = '<div class="filter-label">Medal <span class="toggle-link" id="medalAll">All</span> <span class="toggle-link" id="medalNone">None</span></div><div class="filter-opts" id="filterMedalOpts"></div>';
+  container.appendChild(medalGroup);
+  var medalOpts = document.getElementById('filterMedalOpts');
+  MEDAL_ORDER.forEach(function(m) {
+    var lbl = document.createElement('label');
+    lbl.className = 'checked';
+    lbl.innerHTML = '<input type="checkbox" checked data-medal="' + m + '"> <span style="color:' + (MEDAL_COLORS[m] || '#555') + '">' + (MEDAL_LABELS[m] || m) + '</span>';
+    lbl.querySelector('input').addEventListener('change', function() {
+      this.parentElement.className = this.checked ? 'checked' : '';
+      renderScoreTable();
+    });
+    medalOpts.appendChild(lbl);
+  });
+  document.getElementById('medalAll').addEventListener('click', function() {
+    medalOpts.querySelectorAll('input').forEach(function(cb) { cb.checked = true; cb.parentElement.className = 'checked'; });
+    renderScoreTable();
+  });
+  document.getElementById('medalNone').addEventListener('click', function() {
+    medalOpts.querySelectorAll('input').forEach(function(cb) { cb.checked = false; cb.parentElement.className = ''; });
+    renderScoreTable();
+  });
+
+  // Search
+  var searchGroup = document.createElement('div');
+  searchGroup.className = 'filter-group';
+  searchGroup.innerHTML = '<div class="filter-label">Search</div><input type="text" class="filter-search" id="filterSearch" placeholder="Song title...">';
+  container.appendChild(searchGroup);
+  document.getElementById('filterSearch').addEventListener('input', renderScoreTable);
+})();
+
+function renderScoreTable() {
+  var checkedDiffs = {};
+  document.querySelectorAll('#filterDiffOpts input:checked').forEach(function(cb) {
+    checkedDiffs[cb.getAttribute('data-diff')] = true;
+  });
+  var checkedLvs = {};
+  document.querySelectorAll('#filterLvOpts input:checked').forEach(function(cb) {
+    checkedLvs[parseInt(cb.getAttribute('data-lv'))] = true;
+  });
+  var checkedMedals = {};
+  document.querySelectorAll('#filterMedalOpts input:checked').forEach(function(cb) {
+    checkedMedals[cb.getAttribute('data-medal')] = true;
+  });
+  var search = document.getElementById('filterSearch').value.toLowerCase();
+
+  var filtered = allCharts.filter(function(c) {
+    if (!checkedDiffs[c.diff]) return false;
+    if (!checkedLvs[c.level]) return false;
+    if (!checkedMedals[c.medal]) return false;
+    if (search && c.title.toLowerCase().indexOf(search) < 0 && (!c.genre || c.genre.toLowerCase().indexOf(search) < 0)) return false;
+    return true;
+  });
+
+  filtered.sort(function(a, b) {
+    var va = a[scoreSort.key], vb = b[scoreSort.key];
+    if (scoreSort.key === 'medal') {
+      va = MEDAL_ORDER.indexOf(a.medal);
+      vb = MEDAL_ORDER.indexOf(b.medal);
+    }
+    if (scoreSort.key === 'rank') {
+      va = a.rank ? RANK_ORDER.indexOf(a.rank) : -1;
+      vb = b.rank ? RANK_ORDER.indexOf(b.rank) : -1;
+    }
+    if (va === vb) return 0;
+    if (va === null || va === undefined) return 1;
+    if (vb === null || vb === undefined) return -1;
+    if (typeof va === 'string') return va.localeCompare(vb) * scoreSort.dir;
+    return (va - vb) * scoreSort.dir;
+  });
+
+  document.getElementById('scoreCount').textContent = filtered.length + ' charts';
+
+  var tbody = document.querySelector('#scoreTable tbody');
+  var html = '';
+  var limit = Math.min(filtered.length, 500);
+  for (var i = 0; i < limit; i++) {
+    var c = filtered[i];
+    html += '<tr>' +
+      '<td>' + esc(displayTitle(c.title, c.genre)) + '</td>' +
+      '<td>' + esc(c.artist) + '</td>' +
+      '<td class="diff-' + c.diff + '">' + c.diff.toUpperCase() + '</td>' +
+      '<td>' + c.level + '</td>' +
+      '<td class="score-cell">' + (c.score > 0 ? c.score : '-') + '</td>' +
+      '<td class="medal-cell" style="color:' + (MEDAL_COLORS[c.medal] || '#555') + '">' + (MEDAL_LABELS[c.medal] || c.medal) + '</td>' +
+      '<td>' + (c.rank || '-') + '</td>' +
+      '</tr>';
+  }
+  if (filtered.length > 500) {
+    html += '<tr><td colspan="7" style="text-align:center;color:var(--text2)">... and ' + (filtered.length - 500) + ' more</td></tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+// Sort headers
+document.querySelectorAll('#scoreTable th[data-sort]').forEach(function(th) {
+  th.addEventListener('click', function() {
+    var key = this.getAttribute('data-sort');
+    if (scoreSort.key === key) {
+      scoreSort.dir *= -1;
+    } else {
+      scoreSort.key = key;
+      scoreSort.dir = key === 'title' || key === 'artist' || key === 'diff' ? 1 : -1;
+    }
+    document.querySelectorAll('#scoreTable th').forEach(function(h) {
+      var arrow = h.querySelector('.sort-arrow');
+      if (arrow) arrow.remove();
+    });
+    var arrow = document.createElement('span');
+    arrow.className = 'sort-arrow';
+    arrow.textContent = scoreSort.dir > 0 ? ' \u25b2' : ' \u25bc';
+    this.appendChild(arrow);
+    renderScoreTable();
+  });
+});
+
+renderScoreTable();
+
+// === Clear Lamp Stats ===
+(function() {
+  // Build header
+  var headerRow = document.getElementById('lampHeader');
+  var headerCols = ['Lv', 'Total'];
+  for (var mi = 0; mi < MEDAL_ORDER.length; mi++) {
+    headerCols.push(MEDAL_LABELS[MEDAL_ORDER[mi]]);
+  }
+  headerRow.innerHTML = '<th>' + headerCols[0] + '</th><th>' + headerCols[1] + '</th>';
+  for (var hi = 0; hi < MEDAL_ORDER.length; hi++) {
+    headerRow.innerHTML += '<th style="color:' + (MEDAL_COLORS[MEDAL_ORDER[hi]] || '#555') + '">' + headerCols[hi + 2] + '</th>';
+  }
+
+  // Compute stats
+  var lvStats = {};
+  for (var i = 0; i < allCharts.length; i++) {
+    var c = allCharts[i];
+    var lv = c.level;
+    if (!lvStats[lv]) {
+      lvStats[lv] = { total: 0 };
+      for (var mi2 = 0; mi2 < MEDAL_ORDER.length; mi2++) lvStats[lv][MEDAL_ORDER[mi2]] = 0;
+    }
+    lvStats[lv].total++;
+    if (lvStats[lv][c.medal] !== undefined) lvStats[lv][c.medal]++;
+  }
+
+  var tbody = document.querySelector('#lampTable tbody');
+  var html = '';
+  var levels = Object.keys(lvStats).map(Number).sort(function(a,b){return a-b;});
+  var totals = { total: 0 };
+  for (var mi4 = 0; mi4 < MEDAL_ORDER.length; mi4++) totals[MEDAL_ORDER[mi4]] = 0;
+
+  for (var li = 0; li < levels.length; li++) {
+    var lv = levels[li];
+    var s = lvStats[lv];
+    totals.total += s.total;
+    html += '<tr><td><b>' + lv + '</b></td><td>' + s.total + '</td>';
+    for (var mi3 = 0; mi3 < MEDAL_ORDER.length; mi3++) {
+      var m = MEDAL_ORDER[mi3];
+      var count = s[m] || 0;
+      totals[m] += count;
+      var color = MEDAL_COLORS[m] || '#555';
+      html += '<td style="color:' + color + '">' + (count || '-') + '</td>';
+    }
+    html += '</tr>';
+  }
+
+  // Total row
+  html += '<tr style="border-top:2px solid var(--border);font-weight:bold"><td>Total</td><td>' + totals.total + '</td>';
+  for (var mi5 = 0; mi5 < MEDAL_ORDER.length; mi5++) {
+    var m2 = MEDAL_ORDER[mi5];
+    var color2 = MEDAL_COLORS[m2] || '#555';
+    html += '<td style="color:' + color2 + '">' + (totals[m2] || '-') + '</td>';
+  }
+  html += '</tr>';
+
+  tbody.innerHTML = html;
+})();
+
+// === Rank Lamp Stats ===
+(function() {
+  var RANK_DISPLAY = [null, 'E', 'D', 'C', 'B', 'A', 'AA', 'AAA', 'S'];
+  var RANK_LABELS = ['-', 'E', 'D', 'C', 'B', 'A', 'AA', 'AAA', 'S'];
+
+  // Build header
+  var headerRow = document.getElementById('rankHeader');
+  headerRow.innerHTML = '<th>Lv</th><th>Total</th>';
+  for (var ri = 0; ri < RANK_LABELS.length; ri++) {
+    headerRow.innerHTML += '<th>' + RANK_LABELS[ri] + '</th>';
+  }
+
+  // Compute stats
+  var lvStats = {};
+  for (var i = 0; i < allCharts.length; i++) {
+    var c = allCharts[i];
+    var lv = c.level;
+    if (!lvStats[lv]) {
+      lvStats[lv] = { total: 0 };
+      for (var ri2 = 0; ri2 < RANK_DISPLAY.length; ri2++) lvStats[lv][String(RANK_DISPLAY[ri2])] = 0;
+    }
+    lvStats[lv].total++;
+    lvStats[lv][String(c.rank)]++;
+  }
+
+  var tbody = document.querySelector('#rankTable tbody');
+  var html = '';
+  var levels = Object.keys(lvStats).map(Number).sort(function(a,b){return a-b;});
+  var totals = { total: 0 };
+  for (var ri3 = 0; ri3 < RANK_DISPLAY.length; ri3++) totals[String(RANK_DISPLAY[ri3])] = 0;
+
+  for (var li = 0; li < levels.length; li++) {
+    var lv = levels[li];
+    var s = lvStats[lv];
+    totals.total += s.total;
+    html += '<tr><td><b>' + lv + '</b></td><td>' + s.total + '</td>';
+    for (var ri4 = 0; ri4 < RANK_DISPLAY.length; ri4++) {
+      var count = s[String(RANK_DISPLAY[ri4])] || 0;
+      totals[String(RANK_DISPLAY[ri4])] += count;
+      html += '<td>' + (count || '-') + '</td>';
+    }
+    html += '</tr>';
+  }
+
+  // Total row
+  html += '<tr style="border-top:2px solid var(--border);font-weight:bold"><td>Total</td><td>' + totals.total + '</td>';
+  for (var ri5 = 0; ri5 < RANK_DISPLAY.length; ri5++) {
+    html += '<td>' + (totals[String(RANK_DISPLAY[ri5])] || '-') + '</td>';
+  }
+  html += '</tr>';
+
+  tbody.innerHTML = html;
+})();
+
+// === Tabs ===
+document.querySelectorAll('.tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    this.classList.add('active');
+    document.getElementById('panel-' + this.getAttribute('data-tab')).classList.add('active');
+  });
+});
+
+// === Image Export (two-column) ===
+document.getElementById('btnExportImg').addEventListener('click', function() {
+  var canvas = document.getElementById('exportCanvas');
+  var ctx = canvas.getContext('2d');
+
+  var rowH = 28;
+  var headerH = 40;
+  var titleH = 60;
+  var footerH = 30;
+  var colGap = 16;
+  var cols = [34, 250, 54, 34, 60, 50, 40, 60];
+  var tableW = 0;
+  for (var ci = 0; ci < cols.length; ci++) tableW += cols[ci];
+  tableW += 16;
+
+  var rowCount = Math.min(top50Charts.length, 25);
+  var hasTwoCols = top50Charts.length > 25;
+  var totalW = hasTwoCols ? (tableW * 2 + colGap) : tableW;
+  var totalH = titleH + headerH + (rowCount * rowH) + footerH;
+
+  canvas.width = totalW;
+  canvas.height = totalH;
+
+  // Background
+  ctx.fillStyle = '#fef6f0';
+  ctx.fillRect(0, 0, totalW, totalH);
+
+  // Title area
+  var tier = getTier(popClassValue);
+  ctx.fillStyle = tier.color;
+  ctx.font = 'bold 24px Segoe UI, sans-serif';
+  ctx.fillText("Pop'n Score Tool", 10, 30);
+  var titleRight = 10 + ctx.measureText("Pop'n Score Tool").width + 16;
+  ctx.fillStyle = '#3d2b1f';
+  ctx.font = '16px Segoe UI, sans-serif';
+  var playerName = (DATA.player && DATA.player['\u30d7\u30ec\u30fc\u30e4\u30fc\u540d']) || '';
+  ctx.fillText(playerName + "  Pop'n Class: " + popClassValue.toFixed(2) + ' (' + tier.name + ')', titleRight, 30);
+  ctx.fillStyle = '#907860';
+  ctx.font = '11px Segoe UI, sans-serif';
+  ctx.fillText('Top 50 Charts', titleRight, 48);
+
+  var headers = ['#', 'Genre / Title', 'Diff', 'Lv', 'Score', 'Medal', 'Rank', 'Pts'];
+
+  function drawTable(startIdx, endIdx, offsetX) {
+    var y = titleH;
+    ctx.fillStyle = '#ffe0d0';
+    ctx.fillRect(offsetX, y, tableW, headerH);
+    ctx.fillStyle = '#907860';
+    ctx.font = 'bold 12px Segoe UI, sans-serif';
+    var x = offsetX + 8;
+    for (var hi = 0; hi < headers.length; hi++) {
+      ctx.fillText(headers[hi], x, y + 26);
+      x += cols[hi];
+    }
+
+    y += headerH;
+    ctx.font = '12px Segoe UI, sans-serif';
+    for (var ri = startIdx; ri < endIdx; ri++) {
+      var c = top50Charts[ri];
+      if ((ri - startIdx) % 2 === 0) {
+        ctx.fillStyle = '#fff0ea';
+        ctx.fillRect(offsetX, y, tableW, rowH);
+      }
+
+      x = offsetX + 8;
+      ctx.fillStyle = '#907860';
+      ctx.fillText((ri + 1).toString(), x, y + 19);
+      x += cols[0];
+
+      ctx.fillStyle = '#3d2b1f';
+      var titleText = displayTitle(c.title, c.genre);
+      if (titleText.length > 28) titleText = titleText.substring(0, 26) + '...';
+      ctx.fillText(titleText, x, y + 19);
+      x += cols[1];
+
+      ctx.fillStyle = DIFF_COLORS[c.diff] || '#3d2b1f';
+      ctx.fillText(c.diff.toUpperCase(), x, y + 19);
+      x += cols[2];
+
+      ctx.fillStyle = '#3d2b1f';
+      ctx.fillText(c.level.toString(), x, y + 19);
+      x += cols[3];
+
+      ctx.fillText(c.score > 0 ? c.score.toString() : '-', x, y + 19);
+      x += cols[4];
+
+      ctx.fillStyle = MEDAL_COLORS[c.medal] || '#907860';
+      ctx.fillText(MEDAL_LABELS[c.medal] || c.medal, x, y + 19);
+      x += cols[5];
+
+      ctx.fillStyle = '#3d2b1f';
+      ctx.fillText(c.rank || '-', x, y + 19);
+      x += cols[6];
+
+      ctx.fillStyle = '#e94560';
+      ctx.fillText(c.classPoints.toFixed(2), x, y + 19);
+
+      y += rowH;
+    }
+  }
+
+  drawTable(0, Math.min(top50Charts.length, 25), 0);
+  if (hasTwoCols) {
+    drawTable(25, top50Charts.length, tableW + colGap);
+  }
+
+  // Footer
+  ctx.fillStyle = '#907860';
+  ctx.font = '10px Segoe UI, sans-serif';
+  ctx.fillText("Generated by Pop'n Score Tool | " + (DATA.exportedAt || ''), 10, totalH - 10);
+
+  // Download
+  var link = document.createElement('a');
+  link.download = 'popn_class_top50.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+// === Utility ===
+function esc(s) {
+  if (!s) return '';
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function displayTitle(title, genre) {
+  if (!genre || genre === title) return title;
+  var baseTitle = title.replace(/ \[UPPER\]$/, '');
+  if (genre === baseTitle) return title;
+  return genre + ' / ' + title;
+}
+</script>
+</body>
+</html>
