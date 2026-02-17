@@ -142,7 +142,7 @@
                 <!-- <button class="btn-deep" id="popnme_btn_deep">Deep Scrape</button> -->\
                 <!-- [DEV] Export JSON: hidden for v1, enable for raw JSON export -->\
                 <!-- <button class="btn-export" id="popnme_btn_export" disabled>Export JSON</button> -->\
-                <button class="btn-html" id="popnme_btn_html" disabled>Export HTML</button>\
+                <button class="btn-html" id="popnme_btn_html" disabled>View Results</button>\
                 <button class="btn-img" id="popnme_btn_img" disabled>Export Image</button>\
                 <!-- [DEV] Dump HTML: hidden for v1, enable for raw page HTML dump -->\
                 <!-- <button class="btn-dump" id="popnme_btn_dump">Dump HTML</button> -->\
@@ -158,7 +158,7 @@
         // [DEV] document.getElementById('popnme_btn_deep').addEventListener('click', function() { startUpdate(true); });
         // [DEV] document.getElementById('popnme_btn_dump').addEventListener('click', dumpHTML);
         // [DEV] document.getElementById('popnme_btn_export').addEventListener('click', exportJSON);
-        document.getElementById('popnme_btn_html').addEventListener('click', exportViewerHTML);
+        document.getElementById('popnme_btn_html').addEventListener('click', openViewer);
         document.getElementById('popnme_btn_img').addEventListener('click', exportClassImage);
         document.getElementById('popnme_btn_stop').addEventListener('click', requestStop);
         document.getElementById('popnme_btn_close').addEventListener('click', function() { overlay.remove(); });
@@ -1051,29 +1051,20 @@
     // viewer-template.html is embedded at build time
     var VIEWER_TEMPLATE = '{{VIEWER_TEMPLATE}}';
 
-    function exportViewerHTML() {
+    function openViewer() {
         var exportData = {
             player: collectedData.player,
             scores: collectedData.scores,
             exportedAt: collectedData.exportedAt,
         };
-        log('Generating viewer HTML...');
+        log('Opening viewer...');
 
         var html = VIEWER_TEMPLATE.replace('{{DATA_PLACEHOLDER}}', JSON.stringify(exportData));
 
         var blob = new Blob([html], { type: 'text/html' });
         var viewUrl = URL.createObjectURL(blob);
         window.open(viewUrl, '_blank');
-
-        var dlUrl = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = dlUrl;
-        a.download = 'popn_viewer_' + new Date().toISOString().slice(0, 10) + '.html';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(dlUrl);
-        log('Opened viewer + downloaded HTML');
+        log('Viewer opened in new tab');
     }
 
     // ========== Init ==========
