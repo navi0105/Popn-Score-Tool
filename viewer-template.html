@@ -287,7 +287,7 @@ function medalBonus(medal) {
 function calcClassPoints(lv, score, medal) {
   if (!score || score < 50000) return 0;
   var raw = (10000 * lv + score - 50000 + medalBonus(medal)) / 5440;
-  return Math.min(Math.round(raw * 100) / 100, 100);
+  return Math.min(Math.floor(raw * 100) / 100, 100);
 }
 
 function getTier(value) {
@@ -339,7 +339,7 @@ var popClassValue = 0;
   top50Charts = sorted.slice(0, 50);
   var sum = 0;
   for (var i = 0; i < top50Charts.length; i++) sum += top50Charts[i].classPoints;
-  popClassValue = top50Charts.length > 0 ? Math.round((sum / Math.min(top50Charts.length, 50)) * 100) / 100 : 0;
+  popClassValue = top50Charts.length > 0 ? Math.floor((sum / Math.min(top50Charts.length, 50)) * 100) / 100 : 0;
 })();
 
 // === Render Player Info ===

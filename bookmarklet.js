@@ -821,7 +821,8 @@
     function calcChartClassPts(lv, score, medal) {
         if (!score || score < 50000) return 0;
         var raw = (10000 * lv + score - 50000 + popClassMedalBonus(medal)) / 5440;
-        return Math.min(Math.round(raw * 100) / 100, 100);
+        // Round Down
+        return Math.min(Math.floor(raw * 100) / 100, 100);
     }
 
     function calcPopClass(scores) {
@@ -842,7 +843,8 @@
         if (top50.length === 0) return { value: 0, tier: 'にゃんこ', count: 0 };
         var avg = 0;
         for (var i = 0; i < top50.length; i++) avg += top50[i];
-        avg = Math.round((avg / Math.min(top50.length, 50)) * 100) / 100;
+        // Round down
+        avg = Math.floor((avg / Math.min(top50.length, 50)) * 100) / 100;
         var tier = 'にゃんこ';
         for (var ti = 0; ti < CLASS_TIERS.length; ti++) {
             if (avg >= CLASS_TIERS[ti].min) { tier = CLASS_TIERS[ti].name; break; }
