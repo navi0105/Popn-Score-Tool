@@ -48,6 +48,17 @@ If you prefer not to use the hosted loader:
 | `docs/index.html` | GitHub Pages installation page |
 | `docs/bookmarklet.min.js` | Built JS loaded by the hosted bookmarklet (auto-generated) |
 
+## Known Limitations
+
+### Pop'n Class formula on High Cheers
+
+The community hasn't yet worked out High Cheers' new per-chart Pop'n Class formula. As a stand-in:
+
+- The **Official** Pop'n Class value is scraped directly from the status page, so the real current-version number is always shown.
+- The **Calculated (legacy)** Top 50 value carried over from earlier versions is still computed and displayed alongside it. It uses the old per-chart formula on NORMAL/HYPER/EX charts that have a level, so it diverges from the official number — but stays useful as a relative reference until the new formula is figured out.
+
+I'm trying to reverse-engineer the new formula, but it really needs score data from more players to be tractable. **If you'd like to help, feel free to DM me and share your score table HTML** — more data points across different player profiles is exactly what's missing right now.
+
 ## Future Works
 
 ### History Tracking
