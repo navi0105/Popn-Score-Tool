@@ -1,5 +1,7 @@
 # popn-score-tool
 
+English | [日本語](README.ja.md)
+
 A client-side bookmarklet that scrapes your pop'n music scores from the official e-amusement site and exports them as a self-contained offline HTML viewer.
 
 **Supported versions:** [Jam&Fizz](https://p.eagate.573.jp/game/popn/jamfizz/index.html) and [High Cheers!!](https://p.eagate.573.jp/game/popn/popn29/index.html). The bookmarklet auto-detects which version you're logged in to.
