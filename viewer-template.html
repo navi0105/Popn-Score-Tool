@@ -72,7 +72,7 @@ h2 { color: var(--text); font-size: 18px; margin: 0 0 12px 0; border-bottom: 1px
 .popclass-label { font-size: 12px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
 .popclass-value { font-size: 56px; font-weight: bold; color: var(--accent); line-height: 1.1; }
 .popclass-tier { font-size: 22px; color: var(--yellow); margin: 4px 0; display: flex; gap: 8px; align-items: center; justify-content: center; }
-.popclass-tier-img { height: 28px; vertical-align: middle; }
+.popclass-tier-img { height: 64px; vertical-align: middle; }
 .popclass-bar-wrap {
   width: 240px; max-width: 100%; height: 8px; background: var(--bg);
   border-radius: 4px; margin: 12px auto; overflow: hidden;
@@ -118,6 +118,7 @@ table.data-table tr:hover td { background: var(--bg3); }
 .diff-hyper { color: var(--hyper); }
 .diff-ex { color: var(--ex); }
 .medal-cell { font-size: 11px; }
+.medal-img { width: 28px; height: 28px; vertical-align: middle; }
 .score-cell { font-family: 'Consolas', monospace; }
 
 /* Filters */
@@ -284,6 +285,36 @@ var MEDAL_COLORS = {
   'perfect': '#d4a017'
 };
 
+// srandom medal sprite numbering — 1 is best, descending, with easy_clear
+// bumped to the tail per srandom's table convention. no_play has no image
+// and falls back to text.
+var MEDAL_IMG_NUM = {
+  perfect: 1,
+  full_combo_in_5_good: 2,
+  full_combo_in_20_good: 3,
+  full_combo: 4,
+  normal_clear_in_5_bad: 5,
+  normal_clear_in_20_bad: 6,
+  normal_clear: 7,
+  failed_3: 8,
+  failed_2: 9,
+  failed_1: 10,
+  easy_clear: 11,
+};
+function medalImgUrl(medal) {
+  var n = MEDAL_IMG_NUM[medal];
+  if (!n) return null;
+  // Prefer the base64 fetched at scrape time so the viewer works offline;
+  // fall back to the live srandom URL if the embed step couldn't fetch (e.g. CORS).
+  if (DATA.medalImages && DATA.medalImages[n]) return DATA.medalImages[n];
+  return 'https://static.srandom.com/img/medal/' + n + '.png';
+}
+function medalCellHtml(medal) {
+  var url = medalImgUrl(medal);
+  if (url) return '<img class="medal-img" src="' + url + '" alt="' + esc(MEDAL_LABELS[medal] || medal) + '" title="' + esc(MEDAL_LABELS[medal] || medal) + '">';
+  return '<span style="color:' + (MEDAL_COLORS[medal] || '#555') + '">' + (MEDAL_LABELS[medal] || medal || '-') + '</span>';
+}
+
 var DIFF_COLORS = { dekkapop: '#a06ec0', easy: '#1ea868', normal: '#2e7ed6', hyper: '#d08a10', ex: '#d04030' };
 
 var DIFF_LABELS = { dekkapop: 'でっか', easy: 'EASY', normal: 'NORMAL', hyper: 'HYPER', ex: 'EX' };
@@ -403,7 +434,11 @@ var popClassValue = 0;
   var officialColParts = [];
   var oc = DATA.officialClass;
   if (oc && typeof oc.value === 'number') {
-    var imgTag = oc.tierImg ? ('<img class="popclass-tier-img" src="https://p.eagate.573.jp' + oc.tierImg + '" alt="tier"/>') : '';
+    // Prefer base64 embedded at scrape time (offline-capable); fall back to live URL.
+    var tierImgSrc = oc.tierImgData
+      ? oc.tierImgData
+      : (oc.tierImg ? 'https://p.eagate.573.jp' + oc.tierImg : '');
+    var imgTag = tierImgSrc ? ('<img class="popclass-tier-img" src="' + tierImgSrc + '" alt="tier"/>') : '';
     officialColParts = [
       '<div class="popclass-col">',
         '<div class="popclass-label">Official' + (DATA.version ? ' (' + esc(DATA.version) + ')' : '') + '</div>',
@@ -435,7 +470,7 @@ var popClassValue = 0;
         '<td class="diff-' + c.diff + '">' + (DIFF_LABELS[c.diff] || c.diff.toUpperCase()) + '</td>' +
         '<td>' + c.level + '</td>' +
         '<td class="score-cell">' + (c.score > 0 ? c.score : '-') + '</td>' +
-        '<td class="medal-cell" style="color:' + (MEDAL_COLORS[c.medal] || '#555') + '">' + (MEDAL_LABELS[c.medal] || c.medal) + '</td>' +
+        '<td class="medal-cell">' + medalCellHtml(c.medal) + '</td>' +
         '<td class="score-cell" style="color:var(--accent)">' + c.classPoints.toFixed(2) + '</td>' +
         '</tr>';
     }
@@ -595,7 +630,7 @@ function renderScoreTable() {
       '<td class="diff-' + c.diff + '">' + (DIFF_LABELS[c.diff] || c.diff.toUpperCase()) + '</td>' +
       '<td>' + (c.level > 0 ? c.level : '-') + '</td>' +
       '<td class="score-cell">' + (c.score > 0 ? c.score : '-') + '</td>' +
-      '<td class="medal-cell" style="color:' + (MEDAL_COLORS[c.medal] || '#555') + '">' + (MEDAL_LABELS[c.medal] || c.medal) + '</td>' +
+      '<td class="medal-cell">' + medalCellHtml(c.medal) + '</td>' +
       '<td>' + (c.rank || '-') + '</td>' +
       '</tr>';
   }
