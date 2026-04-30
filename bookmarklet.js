@@ -476,12 +476,18 @@
             var hcMedalSrc = hcImgs[0] ? hcImgs[0].getAttribute('src') : null;
             var hcRankSrc = hcImgs[1] ? hcImgs[1].getAttribute('src') : null;
 
+            // Normalize the difficulty label to our internal slot keys.
+            // Same convention as parseMuTopPage: High Cheers' LIGHT replaces the
+            // legacy EASY slot, so it must merge with mu_top entries under 'easy'.
+            var hcDiffRaw = cells[1].textContent.trim().toLowerCase();
+            var hcDiff = hcDiffRaw === 'light' ? 'easy' : hcDiffRaw;
+
             entries.push({
                 title: hcTitleLink ? hcTitleLink.textContent.trim() : '',
                 detailUrl: hcTitleLink ? hcTitleLink.getAttribute('href') : null,
                 genre: paras[0] ? paras[0].textContent.trim() : '',
                 artist: paras[1] ? paras[1].textContent.trim() : '',
-                difficulty: cells[1].textContent.trim().toLowerCase(),
+                difficulty: hcDiff,
                 level: parseInt(cells[2].textContent.trim()) || null,
                 score: hcScore,
                 medal: extractMedal(hcMedalSrc),
@@ -770,35 +776,44 @@
 
         var pages = [
             { name: 'status', url: VERSION_BASE + '/playdata/index.html' },
-            { name: 'mu_top', url: VERSION_BASE + '/playdata/mu_top.html' },
-            { name: 'mu_lv_1_p0', url: buildMuLvURL(1, 0) },
+            { name: 'mu_top', url: buildMuTopURL(0) },
+            // Low levels — see whether mu_lv exposes LIGHT / でっかポップ君 entries
+            // anywhere (these have their own level numbering).
+            { name: 'mu_lv_1_p0',  url: buildMuLvURL(1, 0) },
+            { name: 'mu_lv_5_p0',  url: buildMuLvURL(5, 0) },
+            { name: 'mu_lv_10_p0', url: buildMuLvURL(10, 0) },
+            { name: 'mu_lv_15_p0', url: buildMuLvURL(15, 0) },
+            { name: 'mu_lv_20_p0', url: buildMuLvURL(20, 0) },
             { name: 'mu_lv_30_p0', url: buildMuLvURL(30, 0) },
             { name: 'mu_lv_43_p0', url: buildMuLvURL(43, 0) },
             { name: 'mu_lv_50_p0', url: buildMuLvURL(50, 0) },
         ];
 
-        // Find a played song's detail URL
+        // Pick a sample mu_detail — first try a played song from a high level,
+        // otherwise fall back to the first link on mu_top (covers any version).
         try {
             log('Looking for a played song detail link...');
-            var listHTML = await fetchPage(buildMuLvURL(43, 0));
-            var listDoc = parseHTML(listHTML);
-            var entries = parseMuLvPage(listDoc);
+            var sampleHTML = await fetchPage(buildMuLvURL(43, 0));
+            var sampleDoc = parseHTML(sampleHTML);
+            var sampleEntries = parseMuLvPage(sampleDoc);
             var playedEntry = null;
-            for (var ei = 0; ei < entries.length; ei++) {
-                if (entries[ei].score > 0 && entries[ei].detailUrl) {
-                    playedEntry = entries[ei];
+            for (var ei = 0; ei < sampleEntries.length; ei++) {
+                if (sampleEntries[ei].score > 0 && sampleEntries[ei].detailUrl) {
+                    playedEntry = sampleEntries[ei];
                     break;
                 }
             }
-            if (playedEntry) {
-                log('Found played song: ' + playedEntry.title + ' (score=' + playedEntry.score + ')');
-                pages.push({ name: 'mu_detail_sample', url: playedEntry.detailUrl });
-            } else {
-                // Fallback: pick the first song
-                var firstLink = listDoc.querySelector('ul.mu_list_table > li:nth-child(2) div.col_music_lv a');
-                if (firstLink) {
-                    pages.push({ name: 'mu_detail_sample', url: firstLink.getAttribute('href') });
+            if (!playedEntry) {
+                var muTopHTML = await fetchPage(buildMuTopURL(0));
+                var muTopDoc = parseHTML(muTopHTML);
+                var muTopEntries = parseMuTopPage(muTopDoc);
+                for (var mi = 0; mi < muTopEntries.length; mi++) {
+                    if (muTopEntries[mi].detailUrl) { playedEntry = muTopEntries[mi]; break; }
                 }
+            }
+            if (playedEntry) {
+                log('Sample detail: ' + playedEntry.title + ' (score=' + (playedEntry.score || 0) + ')');
+                pages.push({ name: 'mu_detail_sample', url: playedEntry.detailUrl });
             }
         } catch (e) {
             log('Could not find detail link: ' + e.message);
