@@ -59,12 +59,6 @@ The community hasn't yet worked out High Cheers' new per-chart Pop'n Class formu
 
 I'm trying to reverse-engineer the new formula, but it really needs score data from more players to be tractable. **If you'd like to help, feel free to DM me and share your score table HTML** — more data points across different player profiles is exactly what's missing right now.
 
-## Future Works
-
-### History Tracking
-
-I don't intend to provide a centralized server for long-term score tracking like [iidx.me](https://iidx.me) or other score management services. That said, helping players see their growth over time is still a goal worth pursuing. One idea is to build an offline score management site similar to [Lampghost](https://github.com/Catizard/lampghost), which would allow long-term record keeping without requiring a server.
-
 ## License
 
 MIT
