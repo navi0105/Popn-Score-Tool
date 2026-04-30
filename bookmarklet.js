@@ -292,6 +292,42 @@
         });
     }
 
+    // srandom medal sprite numbering — kept in sync with viewer-template.html.
+    // 1 is best (perfect), descending; easy_clear is bumped to 11 per srandom's
+    // table convention. no_play has no sprite.
+    var MEDAL_IMG_NUM = {
+        perfect: 1,
+        full_combo_in_5_good: 2,
+        full_combo_in_20_good: 3,
+        full_combo: 4,
+        normal_clear_in_5_bad: 5,
+        normal_clear_in_20_bad: 6,
+        normal_clear: 7,
+        failed_3: 8,
+        failed_2: 9,
+        failed_1: 10,
+        easy_clear: 11,
+    };
+
+    // Pre-fetch medal sprites from srandom and convert to base64 so the exported
+    // viewer is offline-capable. Cross-origin fetch may fail without CORS — in
+    // that case we just leave images empty and the viewer falls back to the
+    // direct URL (which works as long as the user is online when opening it).
+    function fetchAllMedalImages() {
+        var nums = [1,2,3,4,5,6,7,8,9,10,11];
+        return Promise.all(nums.map(function(n) {
+            return fetchImageAsDataURL('https://static.srandom.com/img/medal/' + n + '.png')
+                .then(function(data) { return [n, data]; })
+                .catch(function() { return [n, null]; });
+        })).then(function(pairs) {
+            var out = {};
+            for (var i = 0; i < pairs.length; i++) {
+                if (pairs[i][1]) out[pairs[i][0]] = pairs[i][1];
+            }
+            return out;
+        });
+    }
+
     // ========== URL builders ==========
 
     function buildMuLvURL(lv, page) {
@@ -835,16 +871,30 @@
             collectedData.player = parseStatusPage(parseHTML(statusHTML));
             log('Player: ' + (collectedData.player['プレーヤー名'] || 'OK'));
 
-            // Fetch character avatar as base64 for offline embedding
+            // Fetch character avatar + official-class tier image + srandom medal
+            // sprites as base64 in parallel, so the exported viewer is offline-capable.
             var chara = collectedData.player['使用キャラクター'];
+            var tierImgPath = collectedData.player.officialClass && collectedData.player.officialClass.tierImg;
+            var imageJobs = [
+                fetchAllMedalImages().then(function(map) {
+                    collectedData.medalImages = map;
+                    log('Medal sprites: ' + Object.keys(map).length + '/11 fetched');
+                }, function(e) { log('Medal sprites fetch error: ' + e.message); }),
+            ];
             if (chara && chara.img) {
-                try {
-                    chara.imgData = await fetchImageAsDataURL(chara.img);
+                imageJobs.push(fetchImageAsDataURL(chara.img).then(function(d) {
+                    chara.imgData = d;
                     log('Character avatar: ' + chara.name);
-                } catch (e) {
-                    log('Could not fetch avatar: ' + e.message);
-                }
+                }, function(e) { log('Could not fetch avatar: ' + e.message); }));
             }
+            if (tierImgPath) {
+                var tierAbs = tierImgPath.indexOf('://') >= 0 ? tierImgPath : ('https://p.eagate.573.jp' + tierImgPath);
+                imageJobs.push(fetchImageAsDataURL(tierAbs).then(function(d) {
+                    collectedData.player.officialClass.tierImgData = d;
+                    log('Pop\'n Class tier image fetched');
+                }, function(e) { log('Could not fetch tier image: ' + e.message); }));
+            }
+            await Promise.all(imageJobs);
 
             if (stopRequested) { finish('Stopped'); return; }
 
@@ -1068,6 +1118,7 @@
             scores: collectedData.scores,
             popClass: collectedData.popClass,
             officialClass: collectedData.officialClass,
+            medalImages: collectedData.medalImages,
             version: VERSION ? VERSION.label : null,
             exportedAt: collectedData.exportedAt,
         };
@@ -1273,6 +1324,7 @@
             scores: collectedData.scores,
             popClass: collectedData.popClass,
             officialClass: collectedData.officialClass,
+            medalImages: collectedData.medalImages,
             version: VERSION ? VERSION.label : null,
             exportedAt: collectedData.exportedAt,
         };
