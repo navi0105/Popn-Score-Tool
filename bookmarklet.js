@@ -12,7 +12,25 @@
 (function () {
     'use strict';
 
-    var GAME_BASE = '/game/popn/jamfizz';
+    // Auto-detect pop'n music version from current URL.
+    // Jam&Fizz lives under /game/popn/jamfizz/ ; High Cheers under /game/popn/popn29/.
+    // verAll = the value of the "ALL versions" option in the mu_lv/mu_top filter form.
+    // Critical: it differs between releases. In Jam&Fizz the option labeled "ALL" is
+    // value="0"; in High Cheers value="0" is "pop'n 家庭用" (a small home-console subset)
+    // and "ALL" is value="-1". Using the wrong value silently drops ~99% of the catalog.
+    var SUPPORTED_VERSIONS = {
+        'jamfizz': { base: '/game/popn/jamfizz', label: 'Jam&Fizz',    hasMuTop: false, hasOfficialClass: false, verAll: '0'  },
+        'popn29':  { base: '/game/popn/popn29',  label: 'High Cheers', hasMuTop: true,  hasOfficialClass: true,  verAll: '-1' },
+    };
+    function detectVersion() {
+        var path = location.pathname || '';
+        for (var key in SUPPORTED_VERSIONS) {
+            if (path.indexOf('/game/popn/' + key + '/') === 0) return SUPPORTED_VERSIONS[key];
+        }
+        return null;
+    }
+    var VERSION = detectVersion();
+    var VERSION_BASE = VERSION ? VERSION.base : '/game/popn/jamfizz';
     var MAX_LEVEL = 50;
     var PAGE_DELAY = 400;
     var DETAIL_DELAY = 300;
@@ -49,8 +67,11 @@
         'rank_d': 'D',
         'rank_c': 'C',
         'rank_b': 'B',
+        'rank_b_plus': 'B+',
         'rank_a1': 'A',
+        'rank_a1_plus': 'A+',
         'rank_a2': 'AA',
+        'rank_a2_plus': 'AA+',
         'rank_a3': 'AAA',
         'rank_s': 'S',
     };
@@ -144,8 +165,7 @@
                 <!-- <button class="btn-export" id="popnme_btn_export" disabled>Export JSON</button> -->\
                 <button class="btn-html" id="popnme_btn_html" disabled>View Results</button>\
                 <button class="btn-img" id="popnme_btn_img" disabled>Export Image</button>\
-                <!-- [DEV] Dump HTML: hidden for v1, enable for raw page HTML dump -->\
-                <!-- <button class="btn-dump" id="popnme_btn_dump">Dump HTML</button> -->\
+                <button class="btn-dump" id="popnme_btn_dump">Dump HTML</button>\
                 <button class="btn-stop" id="popnme_btn_stop" disabled>Stop</button>\
                 <button class="btn-close" id="popnme_btn_close">Close</button>\
             </div>\
@@ -156,7 +176,7 @@
 
         document.getElementById('popnme_btn_quick').addEventListener('click', function() { startUpdate(false); });
         // [DEV] document.getElementById('popnme_btn_deep').addEventListener('click', function() { startUpdate(true); });
-        // [DEV] document.getElementById('popnme_btn_dump').addEventListener('click', dumpHTML);
+        document.getElementById('popnme_btn_dump').addEventListener('click', dumpHTML);
         // [DEV] document.getElementById('popnme_btn_export').addEventListener('click', exportJSON);
         document.getElementById('popnme_btn_html').addEventListener('click', openViewer);
         document.getElementById('popnme_btn_img').addEventListener('click', exportClassImage);
@@ -275,8 +295,16 @@
     // ========== URL builders ==========
 
     function buildMuLvURL(lv, page) {
-        return GAME_BASE + '/playdata/mu_lv.html?page=' + page
-            + '&version=0&category=0&keyword=&lv=' + lv;
+        var verAll = (VERSION && VERSION.verAll) || '0';
+        return VERSION_BASE + '/playdata/mu_lv.html?page=' + page
+            + '&version=' + verAll + '&bemani=0&category=0&keyword=&lv=' + lv
+            + '&sort=music&sort_type=up';
+    }
+
+    function buildMuTopURL(page) {
+        var verAll = (VERSION && VERSION.verAll) || '0';
+        return VERSION_BASE + '/playdata/mu_top.html?page=' + page
+            + '&version=' + verAll + '&bemani=0&category=0&keyword=&sort=music&sort_type=up';
     }
 
     // ========== Parsers ==========
@@ -284,18 +312,38 @@
     function parseStatusPage(doc) {
         var data = {};
 
-        doc.querySelectorAll('div.st_box div.item').forEach(function(itemEl) {
-            var label = itemEl.textContent.trim().replace(/^◆/, '');
-            var valueEl = itemEl.nextElementSibling;
-            if (!valueEl || !valueEl.classList.contains('item_st')) return;
+        // Two layouts seen in the wild:
+        //   Jam&Fizz: <div class="st_box"> alternating <div class="item">label</div><div class="item_st">value</div>
+        //   High Cheers: <div class="st_box"><ul><li><p>label</p><div>value</div></li>...
+        var jamfizzItems = doc.querySelectorAll('div.st_box div.item');
+        if (jamfizzItems.length > 0) {
+            jamfizzItems.forEach(function(itemEl) {
+                var label = itemEl.textContent.trim().replace(/^◆/, '');
+                var valueEl = itemEl.nextElementSibling;
+                if (!valueEl || !valueEl.classList.contains('item_st')) return;
 
-            var img = valueEl.querySelector('img');
-            if (img) {
-                data[label] = { text: valueEl.textContent.trim(), img: img.getAttribute('src') };
-            } else {
-                data[label] = valueEl.textContent.trim();
-            }
-        });
+                var img = valueEl.querySelector('img');
+                if (img) {
+                    data[label] = { text: valueEl.textContent.trim(), img: img.getAttribute('src') };
+                } else {
+                    data[label] = valueEl.textContent.trim();
+                }
+            });
+        } else {
+            doc.querySelectorAll('div.st_box ul li').forEach(function(li) {
+                var labelEl = li.querySelector('p');
+                var valueEl = li.querySelector('div');
+                if (!labelEl || !valueEl) return;
+                var label = labelEl.textContent.trim().replace(/^◆/, '');
+                if (!label) return;
+                var img = valueEl.querySelector('img');
+                if (img) {
+                    data[label] = { text: valueEl.textContent.trim(), img: img.getAttribute('src') };
+                } else {
+                    data[label] = valueEl.textContent.trim();
+                }
+            });
+        }
 
         var charaEl = doc.querySelector('#chara');
         if (charaEl) {
@@ -303,6 +351,21 @@
             data['使用キャラクター'] = {
                 name: charaEl.textContent.trim(),
                 img: charaImg ? charaImg.getAttribute('src') : null,
+            };
+        }
+
+        // Official Pop'n Class (High Cheers only) — value text + tier image
+        // <div id="popnclass"><img src=".../popclass8.png" /><br />170.56</div>
+        var popnclassEl = doc.querySelector('#popnclass');
+        if (popnclassEl) {
+            var classImg = popnclassEl.querySelector('img');
+            var classText = popnclassEl.textContent.trim();
+            var classValue = parseFloat(classText);
+            var tierMatch = classImg ? (classImg.getAttribute('src') || '').match(/popclass(\d+)\.png/) : null;
+            data['officialClass'] = {
+                value: isNaN(classValue) ? null : classValue,
+                tierIndex: tierMatch ? parseInt(tierMatch[1]) : null,
+                tierImg: classImg ? classImg.getAttribute('src') : null,
             };
         }
 
@@ -322,62 +385,147 @@
     /**
      * Parse mu_lv.html (level-filtered list page)
      *
-     * Structure: ul.mu_list_table > li (first li is table header)
-     * Each row contains one difficulty:
-     *   div.col_music_lv  = title/genre/artist + detail link
-     *   div.col_normal_lv = difficulty name ("EASY"/"NORMAL"/"HYPER"/"EX")
-     *   div.col_hyper_lv  = level number
-     *   div.col_ex_lv     = medal img + rank img + score
+     * Two layouts supported:
+     *   Jam&Fizz   ul.mu_list_table > li, cells use col_music_lv / col_normal_lv /
+     *              col_hyper_lv / col_ex_lv classes, score after <br /> in col_ex_lv.
+     *   High Cheers ul.mu_list_lv_table > li, cells are unclassed plain <div>s in
+     *              order [title-block, difficulty, level, medal+rank+score-in-<p>].
      *
      * Returns: one entry per row { title, detailUrl, genre, artist, difficulty, level, score, medal, rank, ... }
      */
     function parseMuLvPage(doc) {
         var entries = [];
-        var rows = doc.querySelectorAll('ul.mu_list_table > li');
+        var jamfizzRows = doc.querySelectorAll('ul.mu_list_table > li');
+        if (jamfizzRows.length > 0) {
+            for (var i = 1; i < jamfizzRows.length; i++) {
+                var li = jamfizzRows[i];
+                var colMusic = li.querySelector('div.col_music_lv');
+                if (!colMusic) continue;
 
-        for (var i = 1; i < rows.length; i++) {
-            var li = rows[i];
+                var titleLink = colMusic.querySelector('a');
+                var subDivs = colMusic.querySelectorAll('div');
 
-            var colMusic = li.querySelector('div.col_music_lv');
-            if (!colMusic) continue;
+                var diffEl = li.querySelector('div.col_normal_lv');
+                var diffText = diffEl ? diffEl.textContent.trim().toLowerCase() : '';
 
-            var titleLink = colMusic.querySelector('a');
-            var subDivs = colMusic.querySelectorAll('div');
+                var levelEl = li.querySelector('div.col_hyper_lv');
+                var levelText = levelEl ? levelEl.textContent.trim() : '';
 
-            var diffText = '';
-            var diffEl = li.querySelector('div.col_normal_lv');
-            if (diffEl) diffText = diffEl.textContent.trim().toLowerCase();
+                var scoreCol = li.querySelector('div.col_ex_lv');
+                var score = null, medalSrc = null, rankSrc = null;
+                if (scoreCol) {
+                    var imgs = scoreCol.querySelectorAll('img');
+                    medalSrc = imgs[0] ? imgs[0].getAttribute('src') : null;
+                    rankSrc = imgs[1] ? imgs[1].getAttribute('src') : null;
+                    score = extractScore(scoreCol);
+                }
 
-            var levelText = '';
-            var levelEl = li.querySelector('div.col_hyper_lv');
-            if (levelEl) levelText = levelEl.textContent.trim();
-
-            var scoreCol = li.querySelector('div.col_ex_lv');
-            var score = null;
-            var medalSrc = null;
-            var rankSrc = null;
-            if (scoreCol) {
-                var imgs = scoreCol.querySelectorAll('img');
-                medalSrc = imgs[0] ? imgs[0].getAttribute('src') : null;
-                rankSrc = imgs[1] ? imgs[1].getAttribute('src') : null;
-                score = extractScore(scoreCol);
+                entries.push({
+                    title: titleLink ? titleLink.textContent.trim() : '',
+                    detailUrl: titleLink ? titleLink.getAttribute('href') : null,
+                    genre: subDivs[0] ? subDivs[0].textContent.trim() : '',
+                    artist: subDivs[1] ? subDivs[1].textContent.trim() : '',
+                    difficulty: diffText,
+                    level: parseInt(levelText) || null,
+                    score: score,
+                    medal: extractMedal(medalSrc),
+                    rank: extractRank(rankSrc),
+                    medalImg: medalSrc,
+                    rankImg: rankSrc,
+                });
             }
-
-            entries.push({
-                title: titleLink ? titleLink.textContent.trim() : '',
-                detailUrl: titleLink ? titleLink.getAttribute('href') : null,
-                genre: subDivs[0] ? subDivs[0].textContent.trim() : '',
-                artist: subDivs[1] ? subDivs[1].textContent.trim() : '',
-                difficulty: diffText,
-                level: parseInt(levelText) || null,
-                score: score,
-                medal: extractMedal(medalSrc),
-                rank: extractRank(rankSrc),
-                medalImg: medalSrc,
-                rankImg: rankSrc,
-            });
+            return entries;
         }
 
+        var hcRows = doc.querySelectorAll('ul.mu_list_lv_table > li');
+        for (var j = 0; j < hcRows.length; j++) {
+            var hcLi = hcRows[j];
+            if (hcLi.classList.contains('st_th')) continue;
+            var cells = hcLi.children;
+            if (cells.length < 4) continue;
+
+            var titleCell = cells[0];
+            var hcTitleLink = titleCell.querySelector('a');
+            var paras = titleCell.querySelectorAll('p');
+
+            var hcScore = extractScore(cells[3]);
+            var hcImgs = cells[3].querySelectorAll('img');
+            var hcMedalSrc = hcImgs[0] ? hcImgs[0].getAttribute('src') : null;
+            var hcRankSrc = hcImgs[1] ? hcImgs[1].getAttribute('src') : null;
+
+            entries.push({
+                title: hcTitleLink ? hcTitleLink.textContent.trim() : '',
+                detailUrl: hcTitleLink ? hcTitleLink.getAttribute('href') : null,
+                genre: paras[0] ? paras[0].textContent.trim() : '',
+                artist: paras[1] ? paras[1].textContent.trim() : '',
+                difficulty: cells[1].textContent.trim().toLowerCase(),
+                level: parseInt(cells[2].textContent.trim()) || null,
+                score: hcScore,
+                medal: extractMedal(hcMedalSrc),
+                rank: extractRank(hcRankSrc),
+                medalImg: hcMedalSrc,
+                rankImg: hcRankSrc,
+            });
+        }
+        return entries;
+    }
+
+    /**
+     * Parse mu_top.html (High Cheers full-song flat listing)
+     *
+     * Each data row holds all 5 difficulty columns in order:
+     *   [title-block, でっかポップ君, LIGHT, NORMAL, HYPER, EX]
+     *
+     * No level info on this page — we only extract score/medal/rank.
+     * Difficulty mapping: でっかポップ君 → 'dekkapop' (experimental, no legacy class),
+     * LIGHT → 'easy' (per game design, LIGHT replaces EASY in High Cheers).
+     *
+     * Emits one entry per difficulty per song so it merges cleanly via mergeEntry.
+     */
+    function parseMuTopPage(doc) {
+        var muTopDiffs = ['dekkapop', 'easy', 'normal', 'hyper', 'ex'];
+        var entries = [];
+        var rows = doc.querySelectorAll('ul.mu_list_table > li');
+        for (var i = 0; i < rows.length; i++) {
+            var li = rows[i];
+            if (li.classList.contains('st_th')) continue;
+            var cells = li.children;
+            if (cells.length < 6) continue;
+
+            var titleCell = cells[0];
+            var titleLink = titleCell.querySelector('a');
+            var paras = titleCell.querySelectorAll('p');
+            var base = {
+                title: titleLink ? titleLink.textContent.trim() : '',
+                detailUrl: titleLink ? titleLink.getAttribute('href') : null,
+                genre: paras[0] ? paras[0].textContent.trim() : '',
+                artist: paras[1] ? paras[1].textContent.trim() : '',
+            };
+
+            for (var d = 0; d < muTopDiffs.length; d++) {
+                var cell = cells[d + 1];
+                if (!cell) continue;
+                var imgs = cell.querySelectorAll('img');
+                var medalSrc = imgs[0] ? imgs[0].getAttribute('src') : null;
+                var rankSrc = imgs[1] ? imgs[1].getAttribute('src') : null;
+                var score = extractScore(cell);
+                // Skip cells with no recorded play (no medal img, score = null/0 across the board).
+                // We still emit when score is 0 if medal indicates a play, so the chart shows up as no_play.
+                entries.push({
+                    title: base.title,
+                    detailUrl: base.detailUrl,
+                    genre: base.genre,
+                    artist: base.artist,
+                    difficulty: muTopDiffs[d],
+                    level: null,
+                    score: score,
+                    medal: extractMedal(medalSrc),
+                    rank: extractRank(rankSrc),
+                    medalImg: medalSrc,
+                    rankImg: rankSrc,
+                });
+            }
+        }
         return entries;
     }
 
@@ -513,12 +661,11 @@
         }
 
         var song = songMap[key];
-        var diff = entry.difficulty; // "easy", "normal", "hyper", "ex"
-
+        var diff = entry.difficulty; // 'easy' | 'normal' | 'hyper' | 'ex' | 'dekkapop'
         if (!diff) return;
 
-        // Write or update this difficulty's data
-        if (!song.charts[diff] || song.charts[diff].score === 0 || song.charts[diff].score === null) {
+        var existing = song.charts[diff];
+        if (!existing) {
             song.charts[diff] = {
                 level: entry.level,
                 score: entry.score,
@@ -527,6 +674,21 @@
                 medalImg: entry.medalImg,
                 rankImg: entry.rankImg,
             };
+            return;
+        }
+
+        // Field-level merge so mu_top (no level) and mu_lv (with level) cooperate
+        // regardless of arrival order. Score/medal/rank are upgraded only when the
+        // incoming value indicates a real attempt; level fills in only if missing.
+        if (existing.level == null && entry.level != null) existing.level = entry.level;
+        var existingPlayed = existing.score != null && existing.score > 0;
+        var incomingPlayed = entry.score != null && entry.score > 0;
+        if (incomingPlayed && !existingPlayed) {
+            existing.score = entry.score;
+            existing.medal = entry.medal;
+            existing.rank = entry.rank;
+            existing.medalImg = entry.medalImg;
+            existing.rankImg = entry.rankImg;
         }
     }
 
@@ -584,7 +746,8 @@
         var dump = {};
 
         var pages = [
-            { name: 'status', url: GAME_BASE + '/playdata/index.html' },
+            { name: 'status', url: VERSION_BASE + '/playdata/index.html' },
+            { name: 'mu_top', url: VERSION_BASE + '/playdata/mu_top.html' },
             { name: 'mu_lv_1_p0', url: buildMuLvURL(1, 0) },
             { name: 'mu_lv_30_p0', url: buildMuLvURL(30, 0) },
             { name: 'mu_lv_43_p0', url: buildMuLvURL(43, 0) },
@@ -636,7 +799,8 @@
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;
-        a.download = 'popn_html_dump_v4_' + new Date().toISOString().slice(0, 10) + '.json';
+        var versionSlug = VERSION ? Object.keys(SUPPORTED_VERSIONS).filter(function(k){ return SUPPORTED_VERSIONS[k] === VERSION; })[0] : 'unknown';
+        a.download = 'popn_html_dump_' + versionSlug + '_' + new Date().toISOString().slice(0, 10) + '.json';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -666,8 +830,8 @@
         try {
             // Step 1: Player status
             setMsg1('Fetching player status...');
-            log('<- GET ' + GAME_BASE + '/playdata/index.html');
-            var statusHTML = await fetchPage(GAME_BASE + '/playdata/index.html');
+            log('<- GET ' + VERSION_BASE + '/playdata/index.html');
+            var statusHTML = await fetchPage(VERSION_BASE + '/playdata/index.html');
             collectedData.player = parseStatusPage(parseHTML(statusHTML));
             log('Player: ' + (collectedData.player['プレーヤー名'] || 'OK'));
 
@@ -732,6 +896,35 @@
                 await delay(PAGE_DELAY);
             }
 
+            // Step 2.5: For versions with mu_top (a flat full-song listing), scrape it
+            // to fill in extra difficulties (LIGHT → easy, でっかポップ君 → dekkapop)
+            // that mu_lv doesn't return.
+            if (VERSION && VERSION.hasMuTop && !stopRequested) {
+                setMsg1('Fetching mu_top (extra difficulties)...');
+                var muTopPage = 0;
+                var muTopTotalPages = 1;
+                while (muTopPage < muTopTotalPages) {
+                    if (stopRequested) { finish('Stopped (mu_top p' + muTopPage + ')'); return; }
+                    var muTopURL = buildMuTopURL(muTopPage);
+                    log('<- mu_top p' + (muTopPage + 1));
+                    try {
+                        var muTopHTML = await fetchPage(muTopURL);
+                        var muTopDoc = parseHTML(muTopHTML);
+                        if (muTopPage === 0) muTopTotalPages = getTotalPages(muTopDoc);
+                        var muTopEntries = parseMuTopPage(muTopDoc);
+                        for (var mte = 0; mte < muTopEntries.length; mte++) {
+                            mergeEntry(songMap, muTopEntries[mte]);
+                        }
+                        log('mu_top p' + (muTopPage + 1) + '/' + muTopTotalPages + ': ' + muTopEntries.length + ' entries');
+                    } catch (mtErr) {
+                        log('mu_top p' + (muTopPage + 1) + ' err: ' + mtErr.message);
+                        break;
+                    }
+                    muTopPage++;
+                    if (muTopPage < muTopTotalPages) await delay(PAGE_DELAY);
+                }
+            }
+
             // Convert to array and mark Upper charts
             collectedData.scores = Object.values(songMap);
             markUpperCharts(collectedData.scores);
@@ -782,12 +975,25 @@
         isRunning = false;
         stopRequested = false;
 
-        // Calculate Pop Class
+        // Promote officialClass (parsed from status page on supported versions)
+        // to a top-level field for easier consumption by viewer/PNG export.
+        if (collectedData.player && collectedData.player.officialClass) {
+            collectedData.officialClass = collectedData.player.officialClass;
+        }
+
+        // Calculate legacy Pop'n Class
         if (collectedData.scores.length > 0) {
             var pc = calcPopClass(collectedData.scores);
             collectedData.popClass = pc;
-            setMsg1(msg + " | Pop'n Class: " + pc.value.toFixed(2) + ' (' + pc.tier + ')');
-            log("Pop'n Class: " + pc.value.toFixed(2) + ' (' + pc.tier + ') from ' + pc.count + ' scored charts');
+            var summary = msg + " | Pop'n Class (calc): " + pc.value.toFixed(2) + ' (' + pc.tier + ')';
+            if (collectedData.officialClass && collectedData.officialClass.value != null) {
+                summary += ' | Official: ' + collectedData.officialClass.value.toFixed(2);
+            }
+            setMsg1(summary);
+            log("Pop'n Class (calc): " + pc.value.toFixed(2) + ' (' + pc.tier + ') from ' + pc.count + ' scored charts');
+            if (collectedData.officialClass && collectedData.officialClass.value != null) {
+                log("Pop'n Class (official): " + collectedData.officialClass.value.toFixed(2) + ' (tier ' + collectedData.officialClass.tierIndex + ')');
+            }
         } else {
             setMsg1(msg);
         }
@@ -819,6 +1025,8 @@
     }
 
     function calcChartClassPts(lv, score, medal) {
+        // Skip charts without a level (e.g. でっかポップ君 from mu_top has no level info).
+        if (!lv || lv <= 0) return 0;
         if (!score || score < 50000) return 0;
         var raw = (10000 * lv + score - 50000 + popClassMedalBonus(medal)) / 5440;
         // Round Down
@@ -858,6 +1066,9 @@
         var exportData = {
             player: collectedData.player,
             scores: collectedData.scores,
+            popClass: collectedData.popClass,
+            officialClass: collectedData.officialClass,
+            version: VERSION ? VERSION.label : null,
             exportedAt: collectedData.exportedAt,
         };
         var json = JSON.stringify(exportData, null, 2);
@@ -889,7 +1100,8 @@
         'perfect': '#d4a017'
     };
 
-    var DIFF_COLORS = { easy: '#1ea868', normal: '#2e7ed6', hyper: '#d08a10', ex: '#d04030' };
+    var DIFF_COLORS = { dekkapop: '#a06ec0', easy: '#1ea868', normal: '#2e7ed6', hyper: '#d08a10', ex: '#d04030' };
+    var DIFF_LABELS = { dekkapop: 'でっか', easy: 'EASY', normal: 'NORMAL', hyper: 'HYPER', ex: 'EX' };
 
     function exportClassImage() {
         if (collectedData.scores.length === 0) return;
@@ -954,7 +1166,11 @@
         ctx.fillStyle = '#3d2b1f';
         ctx.font = '16px Segoe UI, sans-serif';
         var playerName = (collectedData.player && collectedData.player['\u30d7\u30ec\u30fc\u30e4\u30fc\u540d']) || '';
-        ctx.fillText(playerName + "  Pop'n Class: " + pc.value.toFixed(2) + ' (' + pc.tier + ')', textLeft, 30);
+        var classLine = playerName + "  Calc: " + pc.value.toFixed(2) + ' (' + pc.tier + ')';
+        if (collectedData.officialClass && typeof collectedData.officialClass.value === 'number') {
+            classLine += '  Official: ' + collectedData.officialClass.value.toFixed(2);
+        }
+        ctx.fillText(classLine, textLeft, 30);
         ctx.fillStyle = '#907860';
         ctx.font = '11px Segoe UI, sans-serif';
         ctx.fillText('Top 50 Charts', textLeft, 48);
@@ -995,7 +1211,7 @@
                 x += cols[1];
 
                 ctx.fillStyle = DIFF_COLORS[c.diff] || '#3d2b1f';
-                ctx.fillText(c.diff.toUpperCase(), x, y + 19);
+                ctx.fillText(DIFF_LABELS[c.diff] || c.diff.toUpperCase(), x, y + 19);
                 x += cols[2];
 
                 ctx.fillStyle = '#3d2b1f';
@@ -1055,6 +1271,9 @@
         var exportData = {
             player: collectedData.player,
             scores: collectedData.scores,
+            popClass: collectedData.popClass,
+            officialClass: collectedData.officialClass,
+            version: VERSION ? VERSION.label : null,
             exportedAt: collectedData.exportedAt,
         };
         log('Opening viewer...');
@@ -1071,8 +1290,18 @@
 
     createUI();
     log("Pop'n Score Tool initialized");
-    setMsg1('Ready. Click Scrape to start.');
-    setMsg2('');
-    setButtonState('idle');
+    if (VERSION) {
+        setMsg1('Ready (' + VERSION.label + '). Click Scrape to start.');
+        setMsg2('');
+        setButtonState('idle');
+    } else {
+        setMsg1('Unsupported page.');
+        setMsg2('Open the Jam&Fizz or High Cheers playdata page first.');
+        document.getElementById('popnme_btn_quick').disabled = true;
+        document.getElementById('popnme_btn_html').disabled = true;
+        document.getElementById('popnme_btn_img').disabled = true;
+        document.getElementById('popnme_btn_dump').disabled = true;
+        log('Detected URL: ' + location.pathname);
+    }
 
 })();
