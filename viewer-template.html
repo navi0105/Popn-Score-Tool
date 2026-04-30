@@ -789,8 +789,29 @@ document.querySelectorAll('.tab').forEach(function(tab) {
   });
 });
 
+// Pre-load embedded medal sprites into HTMLImageElements so canvas can draw them.
+function loadMedalSprites() {
+  var loaded = {};
+  var keys = Object.keys(MEDAL_IMG_NUM);
+  var jobs = keys.map(function(medal) {
+    var src = medalImgUrl(medal);
+    if (!src) return Promise.resolve();
+    return new Promise(function(resolve) {
+      var img = new Image();
+      img.onload = function() { loaded[medal] = img; resolve(); };
+      img.onerror = function() { resolve(); };
+      img.src = src;
+    });
+  });
+  return Promise.all(jobs).then(function() { return loaded; });
+}
+
 // === Image Export (two-column) ===
 document.getElementById('btnExportImg').addEventListener('click', function() {
+  loadMedalSprites().then(renderTop50Image);
+});
+
+function renderTop50Image(medalImgs) {
   var canvas = document.getElementById('exportCanvas');
   var ctx = canvas.getContext('2d');
 
@@ -883,8 +904,14 @@ document.getElementById('btnExportImg').addEventListener('click', function() {
       ctx.fillText(c.score > 0 ? c.score.toString() : '-', x, y + 19);
       x += cols[4];
 
-      ctx.fillStyle = MEDAL_COLORS[c.medal] || '#907860';
-      ctx.fillText(MEDAL_LABELS[c.medal] || c.medal, x, y + 19);
+      var medalImg = medalImgs[c.medal];
+      if (medalImg) {
+        var medalSize = 22;
+        ctx.drawImage(medalImg, x, y + (rowH - medalSize) / 2, medalSize, medalSize);
+      } else {
+        ctx.fillStyle = MEDAL_COLORS[c.medal] || '#907860';
+        ctx.fillText(MEDAL_LABELS[c.medal] || c.medal || '-', x, y + 19);
+      }
       x += cols[5];
 
       ctx.fillStyle = '#e94560';
@@ -923,7 +950,7 @@ document.getElementById('btnExportImg').addEventListener('click', function() {
   } else {
     doDownload();
   }
-});
+}
 
 // === Download HTML ===
 document.getElementById('btnDownloadHtml').addEventListener('click', function() {

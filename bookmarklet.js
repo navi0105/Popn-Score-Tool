@@ -1156,6 +1156,25 @@
     var DIFF_COLORS = { dekkapop: '#a06ec0', easy: '#1ea868', normal: '#2e7ed6', hyper: '#d08a10', ex: '#d04030' };
     var DIFF_LABELS = { dekkapop: 'でっか', easy: 'EASY', normal: 'NORMAL', hyper: 'HYPER', ex: 'EX' };
 
+    // Pre-load embedded medal sprites into HTMLImageElements so canvas can draw them.
+    // Returns a Promise resolving to { medalKey: HTMLImageElement } (no_play has no sprite).
+    function loadMedalSprites() {
+        var loaded = {};
+        var keys = Object.keys(MEDAL_IMG_NUM);
+        var jobs = keys.map(function(medal) {
+            var n = MEDAL_IMG_NUM[medal];
+            var src = MEDAL_IMAGES && MEDAL_IMAGES[n];
+            if (!src) return Promise.resolve();
+            return new Promise(function(resolve) {
+                var img = new Image();
+                img.onload = function() { loaded[medal] = img; resolve(); };
+                img.onerror = function() { resolve(); };
+                img.src = src;
+            });
+        });
+        return Promise.all(jobs).then(function() { return loaded; });
+    }
+
     function exportClassImage() {
         if (collectedData.scores.length === 0) return;
 
@@ -1179,6 +1198,10 @@
         chartPts.sort(function(a, b) { return b.pts - a.pts; });
         var top50 = chartPts.slice(0, 50);
 
+        loadMedalSprites().then(function(medalImgs) { renderClassImage(top50, medalImgs); });
+    }
+
+    function renderClassImage(top50, medalImgs) {
         // Two-column layout: 1-25 left, 26-50 right
         var rowH = 28;
         var headerH = 40;
@@ -1274,8 +1297,14 @@
                 ctx.fillText(c.score > 0 ? c.score.toString() : '-', x, y + 19);
                 x += cols[4];
 
-                ctx.fillStyle = MEDAL_COLORS[c.medal] || '#907860';
-                ctx.fillText(MEDAL_LABELS[c.medal] || c.medal || '-', x, y + 19);
+                var medalImg = medalImgs[c.medal];
+                if (medalImg) {
+                    var medalSize = 22;
+                    ctx.drawImage(medalImg, x, y + (rowH - medalSize) / 2, medalSize, medalSize);
+                } else {
+                    ctx.fillStyle = MEDAL_COLORS[c.medal] || '#907860';
+                    ctx.fillText(MEDAL_LABELS[c.medal] || c.medal || '-', x, y + 19);
+                }
                 x += cols[5];
 
                 ctx.fillStyle = '#e94560';
