@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let source = fs.readFileSync(path.join(__dirname, 'bookmarklet.js'), 'utf8');
+let source = fs.readFileSync(path.join(__dirname, 'bookmarklet.js'), 'utf8').replace(/\r\n/g, '\n');
 
 // Minify bookmarklet source first (VIEWER_TEMPLATE is still a placeholder)
 let minified = source
@@ -25,7 +25,7 @@ let minified = source
 // Embed viewer-template.html AFTER minification (to avoid minifier corrupting template content)
 const templatePath = path.join(__dirname, 'viewer-template.html');
 if (fs.existsSync(templatePath)) {
-    const template = fs.readFileSync(templatePath, 'utf8');
+    const template = fs.readFileSync(templatePath, 'utf8').replace(/\r\n/g, '\n');
     // Minify HTML: strip extra whitespace but preserve structure
     const minTemplate = template
         .replace(/\n\s*/g, '\n')
