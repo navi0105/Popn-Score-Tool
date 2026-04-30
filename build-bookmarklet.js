@@ -22,6 +22,26 @@ let minified = source
     .replace(/\s{2,}/g, ' ')
     .trim();
 
+// Embed medal sprites (medals/1.png ~ 11.png, fetched once via tools/fetch-medals.js)
+// as base64 data URLs so the bookmarklet has them at runtime — no cross-origin
+// fetch needed, and the resulting viewer is fully offline-capable.
+const medalsDir = path.join(__dirname, 'medals');
+const medalImages = {};
+for (let n = 1; n <= 11; n++) {
+    const p = path.join(medalsDir, `${n}.png`);
+    if (fs.existsSync(p)) {
+        medalImages[n] = 'data:image/png;base64,' + fs.readFileSync(p).toString('base64');
+    }
+}
+const medalCount = Object.keys(medalImages).length;
+if (medalCount > 0) {
+    minified = minified.replace("'{{MEDAL_IMAGES}}'", JSON.stringify(medalImages));
+    console.log(`Medal sprites: ${medalCount}/11 embedded`);
+} else {
+    console.warn('WARNING: medals/ is empty. Run `node tools/fetch-medals.js` first.');
+    minified = minified.replace("'{{MEDAL_IMAGES}}'", '{}');
+}
+
 // Embed viewer-template.html AFTER minification (to avoid minifier corrupting template content)
 const templatePath = path.join(__dirname, 'viewer-template.html');
 if (fs.existsSync(templatePath)) {

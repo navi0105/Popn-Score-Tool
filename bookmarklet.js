@@ -309,24 +309,11 @@
         easy_clear: 11,
     };
 
-    // Pre-fetch medal sprites from srandom and convert to base64 so the exported
-    // viewer is offline-capable. Cross-origin fetch may fail without CORS — in
-    // that case we just leave images empty and the viewer falls back to the
-    // direct URL (which works as long as the user is online when opening it).
-    function fetchAllMedalImages() {
-        var nums = [1,2,3,4,5,6,7,8,9,10,11];
-        return Promise.all(nums.map(function(n) {
-            return fetchImageAsDataURL('https://static.srandom.com/img/medal/' + n + '.png')
-                .then(function(data) { return [n, data]; })
-                .catch(function() { return [n, null]; });
-        })).then(function(pairs) {
-            var out = {};
-            for (var i = 0; i < pairs.length; i++) {
-                if (pairs[i][1]) out[pairs[i][0]] = pairs[i][1];
-            }
-            return out;
-        });
-    }
+    // Medal sprites are baked in at build time from local medals/N.png files
+    // (do not write the wildcard form here — the substring /\*  inside a line
+    // comment confuses the build minifier's block-comment regex). No runtime
+    // cross-origin fetch needed. Build script replaces this placeholder.
+    var MEDAL_IMAGES = '{{MEDAL_IMAGES}}';
 
     // ========== URL builders ==========
 
@@ -871,16 +858,15 @@
             collectedData.player = parseStatusPage(parseHTML(statusHTML));
             log('Player: ' + (collectedData.player['プレーヤー名'] || 'OK'));
 
-            // Fetch character avatar + official-class tier image + srandom medal
-            // sprites as base64 in parallel, so the exported viewer is offline-capable.
+            // Medal sprites are baked into the bookmarklet at build time, so no
+            // cross-origin fetch is needed at runtime — just hand them to the viewer.
+            collectedData.medalImages = MEDAL_IMAGES;
+
+            // Character avatar + official-class tier image are both same-origin
+            // (eagate.573.jp), so fetch them in parallel for offline embedding.
             var chara = collectedData.player['使用キャラクター'];
             var tierImgPath = collectedData.player.officialClass && collectedData.player.officialClass.tierImg;
-            var imageJobs = [
-                fetchAllMedalImages().then(function(map) {
-                    collectedData.medalImages = map;
-                    log('Medal sprites: ' + Object.keys(map).length + '/11 fetched');
-                }, function(e) { log('Medal sprites fetch error: ' + e.message); }),
-            ];
+            var imageJobs = [];
             if (chara && chara.img) {
                 imageJobs.push(fetchImageAsDataURL(chara.img).then(function(d) {
                     chara.imgData = d;
