@@ -17,6 +17,7 @@
   --blue: #4a8fe7;
   --purple: #b06ce0;
   --yellow: #e0900a;
+  --dekkapop: #a06ec0;
   --easy: #1ea868;
   --normal: #2e7ed6;
   --hyper: #d08a10;
@@ -63,16 +64,25 @@ h2 { color: var(--text); font-size: 18px; margin: 0 0 12px 0; border-bottom: 1px
 .popclass-card {
   background: linear-gradient(135deg, var(--bg2), var(--bg3));
   border: 1px solid var(--border); border-radius: 12px;
-  padding: 24px; margin-bottom: 24px; text-align: center;
+  padding: 24px; margin-bottom: 24px;
 }
-.popclass-value { font-size: 64px; font-weight: bold; color: var(--accent); line-height: 1.1; }
-.popclass-tier { font-size: 24px; color: var(--yellow); margin: 4px 0; }
+.popclass-grid { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; justify-content: center; }
+.popclass-col { flex: 1 1 240px; min-width: 240px; text-align: center; padding: 8px; }
+.popclass-col + .popclass-col { border-left: 1px solid var(--border); }
+.popclass-label { font-size: 12px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+.popclass-value { font-size: 56px; font-weight: bold; color: var(--accent); line-height: 1.1; }
+.popclass-tier { font-size: 22px; color: var(--yellow); margin: 4px 0; display: flex; gap: 8px; align-items: center; justify-content: center; }
+.popclass-tier-img { height: 28px; vertical-align: middle; }
 .popclass-bar-wrap {
-  width: 300px; max-width: 100%; height: 8px; background: var(--bg);
+  width: 240px; max-width: 100%; height: 8px; background: var(--bg);
   border-radius: 4px; margin: 12px auto; overflow: hidden;
 }
 .popclass-bar { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.5s; }
-.popclass-sub { font-size: 13px; color: var(--text2); }
+.popclass-sub { font-size: 12px; color: var(--text2); }
+.popclass-col + .popclass-col { padding-left: 16px; }
+@media (max-width: 600px) {
+  .popclass-col + .popclass-col { border-left: none; border-top: 1px solid var(--border); padding-top: 16px; padding-left: 8px; }
+}
 
 /* Top 50 two-column */
 .top50-section { margin-bottom: 24px; }
@@ -102,6 +112,7 @@ table.data-table td {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px;
 }
 table.data-table tr:hover td { background: var(--bg3); }
+.diff-dekkapop { color: var(--dekkapop); }
 .diff-easy { color: var(--easy); }
 .diff-normal { color: var(--normal); }
 .diff-hyper { color: var(--hyper); }
@@ -273,9 +284,13 @@ var MEDAL_COLORS = {
   'perfect': '#d4a017'
 };
 
-var DIFF_COLORS = { easy: '#1ea868', normal: '#2e7ed6', hyper: '#d08a10', ex: '#d04030' };
+var DIFF_COLORS = { dekkapop: '#a06ec0', easy: '#1ea868', normal: '#2e7ed6', hyper: '#d08a10', ex: '#d04030' };
 
-var RANK_ORDER = ['E', 'D', 'C', 'B', 'A', 'AA', 'AAA', 'S'];
+var DIFF_LABELS = { dekkapop: 'でっか', easy: 'EASY', normal: 'NORMAL', hyper: 'HYPER', ex: 'EX' };
+
+var ALL_DIFFS = ['easy', 'normal', 'hyper', 'ex', 'dekkapop'];
+
+var RANK_ORDER = ['E', 'D', 'C', 'B', 'B+', 'A', 'A+', 'AA', 'AA+', 'AAA', 'S'];
 
 // === Pop Class Calculation ===
 function medalBonus(medal) {
@@ -312,9 +327,8 @@ var allCharts = [];
   for (var si = 0; si < scores.length; si++) {
     var song = scores[si];
     var charts = song.charts || {};
-    var diffs = ['easy', 'normal', 'hyper', 'ex'];
-    for (var di = 0; di < diffs.length; di++) {
-      var d = diffs[di];
+    for (var di = 0; di < ALL_DIFFS.length; di++) {
+      var d = ALL_DIFFS[di];
       if (!charts[d]) continue;
       var c = charts[d];
       allCharts.push({
@@ -365,19 +379,42 @@ var popClassValue = 0;
 // === Render Pop Class Card ===
 (function() {
   var card = document.getElementById('popclassCard');
-  var tier = getTier(popClassValue);
-  var next = getNextTier(popClassValue);
-  var progress = 100;
-  var progressLabel = 'MAX';
-  if (next) {
-    progress = ((popClassValue - tier.min) / (next.min - tier.min)) * 100;
-    progressLabel = 'Next: ' + next.name + ' (' + next.min.toFixed(2) + ')';
+  var scoredCount = allCharts.filter(function(c){return c.classPoints>0;}).length;
+
+  var calcTier = getTier(popClassValue);
+  var calcNext = getNextTier(popClassValue);
+  var calcProgress = 100;
+  var calcProgressLabel = 'MAX';
+  if (calcNext) {
+    calcProgress = ((popClassValue - calcTier.min) / (calcNext.min - calcTier.min)) * 100;
+    calcProgressLabel = 'Next: ' + calcNext.name + ' (' + calcNext.min.toFixed(2) + ')';
   }
-  card.innerHTML =
-    '<div class="popclass-value" style="color:' + tier.color + '">' + popClassValue.toFixed(2) + '</div>' +
-    '<div class="popclass-tier" style="color:' + tier.color + '">' + tier.name + '</div>' +
-    '<div class="popclass-bar-wrap"><div class="popclass-bar" style="width:' + Math.min(progress, 100) + '%;background:' + tier.color + '"></div></div>' +
-    '<div class="popclass-sub">' + progressLabel + ' | Top 50 avg of ' + allCharts.filter(function(c){return c.classPoints>0;}).length + ' scored charts</div>';
+
+  var calcColParts = [
+    '<div class="popclass-col">',
+      '<div class="popclass-label">Calculated (legacy)</div>',
+      '<div class="popclass-value" style="color:' + calcTier.color + '">' + popClassValue.toFixed(2) + '</div>',
+      '<div class="popclass-tier" style="color:' + calcTier.color + '">' + calcTier.name + '</div>',
+      '<div class="popclass-bar-wrap"><div class="popclass-bar" style="width:' + Math.min(calcProgress, 100) + '%;background:' + calcTier.color + '"></div></div>',
+      '<div class="popclass-sub">' + calcProgressLabel + ' | Top 50 avg of ' + scoredCount + ' scored charts</div>',
+    '</div>'
+  ];
+
+  var officialColParts = [];
+  var oc = DATA.officialClass;
+  if (oc && typeof oc.value === 'number') {
+    var imgTag = oc.tierImg ? ('<img class="popclass-tier-img" src="https://p.eagate.573.jp' + oc.tierImg + '" alt="tier"/>') : '';
+    officialColParts = [
+      '<div class="popclass-col">',
+        '<div class="popclass-label">Official' + (DATA.version ? ' (' + esc(DATA.version) + ')' : '') + '</div>',
+        '<div class="popclass-value">' + oc.value.toFixed(2) + '</div>',
+        '<div class="popclass-tier">' + imgTag + '</div>',
+        '<div class="popclass-sub">Scraped from official site</div>',
+      '</div>'
+    ];
+  }
+
+  card.innerHTML = '<div class="popclass-grid">' + calcColParts.concat(officialColParts).join('') + '</div>';
 })();
 
 // === Render Top 50 Table (two columns) ===
@@ -395,7 +432,7 @@ var popClassValue = 0;
       html += '<tr>' +
         '<td>' + (i + 1) + '</td>' +
         '<td title="' + esc(c.artist) + '">' + esc(displayTitle(c.title, c.genre)) + '</td>' +
-        '<td class="diff-' + c.diff + '">' + c.diff.toUpperCase() + '</td>' +
+        '<td class="diff-' + c.diff + '">' + (DIFF_LABELS[c.diff] || c.diff.toUpperCase()) + '</td>' +
         '<td>' + c.level + '</td>' +
         '<td class="score-cell">' + (c.score > 0 ? c.score : '-') + '</td>' +
         '<td class="medal-cell" style="color:' + (MEDAL_COLORS[c.medal] || '#555') + '">' + (MEDAL_LABELS[c.medal] || c.medal) + '</td>' +
@@ -430,10 +467,15 @@ var scoreSort = { key: 'level', dir: -1 };
   diffGroup.innerHTML = '<div class="filter-label">Difficulty</div><div class="filter-opts" id="filterDiffOpts"></div>';
   container.appendChild(diffGroup);
   var diffOpts = document.getElementById('filterDiffOpts');
-  ['easy','normal','hyper','ex'].forEach(function(d) {
+  ALL_DIFFS.forEach(function(d) {
     var lbl = document.createElement('label');
-    lbl.className = 'checked';
-    lbl.innerHTML = '<input type="checkbox" checked data-diff="' + d + '"> <span class="diff-' + d + '">' + d.toUpperCase() + '</span>';
+    // dekkapop is experimental — off by default and visually demoted.
+    var isExperimental = (d === 'dekkapop');
+    var startChecked = !isExperimental;
+    lbl.className = startChecked ? 'checked' : '';
+    var labelText = DIFF_LABELS[d] || d.toUpperCase();
+    var suffix = isExperimental ? ' <small style="opacity:0.6">(exp)</small>' : '';
+    lbl.innerHTML = '<input type="checkbox"' + (startChecked ? ' checked' : '') + ' data-diff="' + d + '"> <span class="diff-' + d + '">' + labelText + '</span>' + suffix;
     lbl.querySelector('input').addEventListener('change', function() {
       lbl.className = this.checked ? 'checked' : '';
       renderScoreTable();
@@ -516,7 +558,8 @@ function renderScoreTable() {
 
   var filtered = allCharts.filter(function(c) {
     if (!checkedDiffs[c.diff]) return false;
-    if (!checkedLvs[c.level]) return false;
+    // Level filter applies only to charts with a level; level-less (dekkapop) bypass.
+    if (c.level > 0 && !checkedLvs[c.level]) return false;
     if (!checkedMedals[c.medal]) return false;
     if (search && c.title.toLowerCase().indexOf(search) < 0 && (!c.genre || c.genre.toLowerCase().indexOf(search) < 0)) return false;
     return true;
@@ -549,8 +592,8 @@ function renderScoreTable() {
     html += '<tr>' +
       '<td>' + esc(displayTitle(c.title, c.genre)) + '</td>' +
       '<td>' + esc(c.artist) + '</td>' +
-      '<td class="diff-' + c.diff + '">' + c.diff.toUpperCase() + '</td>' +
-      '<td>' + c.level + '</td>' +
+      '<td class="diff-' + c.diff + '">' + (DIFF_LABELS[c.diff] || c.diff.toUpperCase()) + '</td>' +
+      '<td>' + (c.level > 0 ? c.level : '-') + '</td>' +
       '<td class="score-cell">' + (c.score > 0 ? c.score : '-') + '</td>' +
       '<td class="medal-cell" style="color:' + (MEDAL_COLORS[c.medal] || '#555') + '">' + (MEDAL_LABELS[c.medal] || c.medal) + '</td>' +
       '<td>' + (c.rank || '-') + '</td>' +
@@ -599,11 +642,12 @@ renderScoreTable();
     headerRow.innerHTML += '<th style="color:' + (MEDAL_COLORS[MEDAL_ORDER[hi]] || '#555') + '">' + headerCols[hi + 2] + '</th>';
   }
 
-  // Compute stats
+  // Compute stats — skip level-less charts (e.g. dekkapop) so they don't bucket under Lv 0.
   var lvStats = {};
   for (var i = 0; i < allCharts.length; i++) {
     var c = allCharts[i];
     var lv = c.level;
+    if (!lv || lv <= 0) continue;
     if (!lvStats[lv]) {
       lvStats[lv] = { total: 0 };
       for (var mi2 = 0; mi2 < MEDAL_ORDER.length; mi2++) lvStats[lv][MEDAL_ORDER[mi2]] = 0;
@@ -647,8 +691,8 @@ renderScoreTable();
 
 // === Rank Lamp Stats ===
 (function() {
-  var RANK_DISPLAY = [null, 'E', 'D', 'C', 'B', 'A', 'AA', 'AAA', 'S'];
-  var RANK_LABELS = ['No Play', 'E', 'D', 'C', 'B', 'A', 'AA', 'AAA', 'S'];
+  var RANK_DISPLAY = [null, 'E', 'D', 'C', 'B', 'B+', 'A', 'A+', 'AA', 'AA+', 'AAA', 'S'];
+  var RANK_LABELS = ['No Play', 'E', 'D', 'C', 'B', 'B+', 'A', 'A+', 'AA', 'AA+', 'AAA', 'S'];
 
   // Build header
   var headerRow = document.getElementById('rankHeader');
@@ -657,11 +701,12 @@ renderScoreTable();
     headerRow.innerHTML += '<th>' + RANK_LABELS[ri] + '</th>';
   }
 
-  // Compute stats
+  // Compute stats — skip level-less charts (e.g. dekkapop) so they don't bucket under Lv 0.
   var lvStats = {};
   for (var i = 0; i < allCharts.length; i++) {
     var c = allCharts[i];
     var lv = c.level;
+    if (!lv || lv <= 0) continue;
     if (!lvStats[lv]) {
       lvStats[lv] = { total: 0 };
       for (var ri2 = 0; ri2 < RANK_DISPLAY.length; ri2++) lvStats[lv][String(RANK_DISPLAY[ri2])] = 0;
@@ -749,7 +794,11 @@ document.getElementById('btnExportImg').addEventListener('click', function() {
   ctx.fillStyle = '#3d2b1f';
   ctx.font = '16px Segoe UI, sans-serif';
   var playerName = (DATA.player && DATA.player['\u30d7\u30ec\u30fc\u30e4\u30fc\u540d']) || '';
-  ctx.fillText(playerName + "  Pop'n Class: " + popClassValue.toFixed(2) + ' (' + tier.name + ')', textLeft, 30);
+  var classLine = playerName + "  Calc: " + popClassValue.toFixed(2) + ' (' + tier.name + ')';
+  if (DATA.officialClass && typeof DATA.officialClass.value === 'number') {
+    classLine += '  Official: ' + DATA.officialClass.value.toFixed(2);
+  }
+  ctx.fillText(classLine, textLeft, 30);
   ctx.fillStyle = '#907860';
   ctx.font = '11px Segoe UI, sans-serif';
   ctx.fillText('Top 50 Charts', textLeft, 48);
@@ -789,7 +838,7 @@ document.getElementById('btnExportImg').addEventListener('click', function() {
       x += cols[1];
 
       ctx.fillStyle = DIFF_COLORS[c.diff] || '#3d2b1f';
-      ctx.fillText(c.diff.toUpperCase(), x, y + 19);
+      ctx.fillText(DIFF_LABELS[c.diff] || c.diff.toUpperCase(), x, y + 19);
       x += cols[2];
 
       ctx.fillStyle = '#3d2b1f';
