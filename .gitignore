@@ -3,3 +3,6 @@ dumps/
 analysis.md
 test-parser.js
 medal_to_str.json
+tasks/test-harness/
+temp/
+install-local.html
