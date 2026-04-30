@@ -165,7 +165,8 @@
                 <!-- <button class="btn-export" id="popnme_btn_export" disabled>Export JSON</button> -->\
                 <button class="btn-html" id="popnme_btn_html" disabled>View Results</button>\
                 <button class="btn-img" id="popnme_btn_img" disabled>Export Image</button>\
-                <button class="btn-dump" id="popnme_btn_dump">Dump HTML</button>\
+                <!-- [DEV] Dump HTML: hidden for v1, enable for raw page HTML dump -->\
+                <!-- <button class="btn-dump" id="popnme_btn_dump">Dump HTML</button> -->\
                 <button class="btn-stop" id="popnme_btn_stop" disabled>Stop</button>\
                 <button class="btn-close" id="popnme_btn_close">Close</button>\
             </div>\
@@ -176,7 +177,7 @@
 
         document.getElementById('popnme_btn_quick').addEventListener('click', function() { startUpdate(false); });
         // [DEV] document.getElementById('popnme_btn_deep').addEventListener('click', function() { startUpdate(true); });
-        document.getElementById('popnme_btn_dump').addEventListener('click', dumpHTML);
+        // [DEV] document.getElementById('popnme_btn_dump').addEventListener('click', dumpHTML);
         // [DEV] document.getElementById('popnme_btn_export').addEventListener('click', exportJSON);
         document.getElementById('popnme_btn_html').addEventListener('click', openViewer);
         document.getElementById('popnme_btn_img').addEventListener('click', exportClassImage);
@@ -1353,7 +1354,7 @@
         document.getElementById('popnme_btn_quick').disabled = true;
         document.getElementById('popnme_btn_html').disabled = true;
         document.getElementById('popnme_btn_img').disabled = true;
-        document.getElementById('popnme_btn_dump').disabled = true;
+        // [DEV] document.getElementById('popnme_btn_dump').disabled = true;
         log('Detected URL: ' + location.pathname);
     }
 
