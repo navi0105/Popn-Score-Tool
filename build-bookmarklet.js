@@ -22,10 +22,11 @@ let minified = source
     .replace(/\s{2,}/g, ' ')
     .trim();
 
-// Embed medal sprites (medals/1.png ~ 11.png, fetched once via tools/fetch-medals.js)
-// as base64 data URLs so the bookmarklet has them at runtime — no cross-origin
-// fetch needed, and the resulting viewer is fully offline-capable.
-const medalsDir = path.join(__dirname, 'medals');
+// Embed medal sprites (assets/medals/1.png ~ 11.png, fetched once via
+// tools/fetch-medals.js) as base64 data URLs so the bookmarklet has them at
+// runtime — no cross-origin fetch needed, and the resulting viewer is fully
+// offline-capable.
+const medalsDir = path.join(__dirname, 'assets', 'medals');
 const medalImages = {};
 for (let n = 1; n <= 11; n++) {
     const p = path.join(medalsDir, `${n}.png`);
