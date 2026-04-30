@@ -22,6 +22,12 @@ Fix: read both `bookmarklet.js` and `viewer-template.html` with `.replace(/\r\n/
 - Status page structure changed: Jam&Fizz uses `div.st_box > div.item + div.item_st` pairs; High Cheers uses `div.st_box > ul > li > p + div`. The new official Pop'n Class shows in `#popnclass` (value text + tier image `popclass[N].png`).
 - mu_lv table class also differs: Jam&Fizz `mu_list_table`, High Cheers `mu_list_lv_table`. Row cells in High Cheers are unclassed plain `<div>`s (Jam&Fizz had `col_music_lv` / `col_normal_lv` / `col_hyper_lv` / `col_ex_lv`).
 
+## Build minifier: never write `/*` inside a line comment
+
+`build-bookmarklet.js` strips block comments with the naïve regex `/\/\*[\s\S]*?\*\//g`, which scans the whole source without distinguishing string contents or other line comments. If a `//` line comment in `bookmarklet.js` contains the two-char substring slash-star (e.g. a path like `medals/N.png` written with a wildcard), the next regex pass treats it as the opening of a block comment and eats everything up to the next star-slash — typically the closing of an unrelated docstring several functions later. Symptoms: the minified bookmarklet is mysteriously smaller than expected, a chunk of code (often a recently-added var) goes silently missing, and the runtime fails with an undefined identifier.
+
+Workaround: never write `slash-star` inside any comment. Rephrase wildcards (e.g. `medals/N.png` instead of `medals/*.png`). A proper fix would be a comment stripper that respects string boundaries and other comments — out of scope for now; flag if `build-bookmarklet.js`'s comment regex is touched again.
+
 ## URL gotcha: mu_lv `version=0` ≠ "ALL" on High Cheers
 
 In Jam&Fizz, `mu_lv.html?version=0` means "ALL versions" (the catalog-wide scrape we want). In High Cheers, `value="0"` in the version select is **"pop'n 家庭用"** (a ~100-song home-console subset). The actual ALL option is `value="-1"`. Using `version=0` against High Cheers silently returned only that subset and made it look like the user had played far fewer charts than they had.
