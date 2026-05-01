@@ -510,7 +510,11 @@
      * Difficulty mapping: でっかポップ君 → 'dekkapop' (experimental, no legacy class),
      * LIGHT → 'easy' (per game design, LIGHT replaces EASY in High Cheers).
      *
-     * Emits one entry per difficulty per song so it merges cleanly via mergeEntry.
+     * Cell text "-" means the chart doesn't exist for this song; "0" means it
+     * exists but is unplayed. Skip the "-" cells so we don't fabricate phantom
+     * chart slots (most commonly でっかポップ君, which only a subset of songs have).
+     *
+     * Emits one entry per existing difficulty so it merges cleanly via mergeEntry.
      */
     function parseMuTopPage(doc) {
         var muTopDiffs = ['dekkapop', 'easy', 'normal', 'hyper', 'ex'];
@@ -535,12 +539,13 @@
             for (var d = 0; d < muTopDiffs.length; d++) {
                 var cell = cells[d + 1];
                 if (!cell) continue;
+                var pEl = cell.querySelector('p');
+                var pText = pEl ? pEl.textContent.trim() : '';
+                if (pText === '-') continue;
                 var imgs = cell.querySelectorAll('img');
                 var medalSrc = imgs[0] ? imgs[0].getAttribute('src') : null;
                 var rankSrc = imgs[1] ? imgs[1].getAttribute('src') : null;
                 var score = extractScore(cell);
-                // Skip cells with no recorded play (no medal img, score = null/0 across the board).
-                // We still emit when score is 0 if medal indicates a play, so the chart shows up as no_play.
                 entries.push({
                     title: base.title,
                     detailUrl: base.detailUrl,
