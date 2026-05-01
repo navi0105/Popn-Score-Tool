@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let source = fs.readFileSync(path.join(__dirname, 'bookmarklet.js'), 'utf8');
+let source = fs.readFileSync(path.join(__dirname, 'bookmarklet.js'), 'utf8').replace(/\r\n/g, '\n');
 
 // Minify bookmarklet source first (VIEWER_TEMPLATE is still a placeholder)
 let minified = source
@@ -22,10 +22,31 @@ let minified = source
     .replace(/\s{2,}/g, ' ')
     .trim();
 
+// Embed medal sprites (assets/medals/1.png ~ 11.png, fetched once via
+// tools/fetch-medals.js) as base64 data URLs so the bookmarklet has them at
+// runtime — no cross-origin fetch needed, and the resulting viewer is fully
+// offline-capable.
+const medalsDir = path.join(__dirname, 'assets', 'medals');
+const medalImages = {};
+for (let n = 1; n <= 11; n++) {
+    const p = path.join(medalsDir, `${n}.png`);
+    if (fs.existsSync(p)) {
+        medalImages[n] = 'data:image/png;base64,' + fs.readFileSync(p).toString('base64');
+    }
+}
+const medalCount = Object.keys(medalImages).length;
+if (medalCount > 0) {
+    minified = minified.replace("'{{MEDAL_IMAGES}}'", JSON.stringify(medalImages));
+    console.log(`Medal sprites: ${medalCount}/11 embedded`);
+} else {
+    console.warn('WARNING: medals/ is empty. Run `node tools/fetch-medals.js` first.');
+    minified = minified.replace("'{{MEDAL_IMAGES}}'", '{}');
+}
+
 // Embed viewer-template.html AFTER minification (to avoid minifier corrupting template content)
 const templatePath = path.join(__dirname, 'viewer-template.html');
 if (fs.existsSync(templatePath)) {
-    const template = fs.readFileSync(templatePath, 'utf8');
+    const template = fs.readFileSync(templatePath, 'utf8').replace(/\r\n/g, '\n');
     // Minify HTML: strip extra whitespace but preserve structure
     const minTemplate = template
         .replace(/\n\s*/g, '\n')

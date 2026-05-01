@@ -1,16 +1,21 @@
 # popn-score-tool
 
-A client-side bookmarklet that scrapes your [pop'n music Jam&Fizz](https://p.eagate.573.jp/game/popn/jamfizz/index.html) scores from the official e-amusement site and exports them as a self-contained offline HTML viewer.
+English | [日本語](README.ja.md)
+
+A client-side bookmarklet that scrapes your pop'n music scores from the official e-amusement site and exports them as a self-contained offline HTML viewer.
+
+**Supported versions:** [Jam&Fizz](https://p.eagate.573.jp/game/popn/jamfizz/index.html) and [High Cheers!!](https://p.eagate.573.jp/game/popn/popn29/index.html). The bookmarklet auto-detects which version you're logged in to.
 
 ## Features
 
 - **Score Scraping** — Fetches scores by level (Lv 1~50) to get score, medal, and rank for every chart
-- **Pop'n Class** — Calculates your Pop'n Class rating (Top 50 chart average) with tier display
+- **Pop'n Class** — Calculates the legacy Top 50 Pop'n Class rating with tier display. On High Cheers, the official Pop'n Class scraped from the status page is also shown side-by-side (the official per-chart formula isn't public yet, so the legacy calculation stays for cross-reference).
+- **High Cheers extras** — でっかポップ君 / LIGHT charts are scraped from `mu_top.html` and shown as experimental data (LIGHT maps to the legacy `easy` slot since it replaces EASY; でっかポップ君 has no level info and is opt-in in the score browser).
 - **Export HTML** — Download a self-contained offline viewer with:
-  - Pop'n Class card + Top 50 table
+  - Dual Pop'n Class card (calculated + official) + Top 50 table
   - Sortable & filterable score browser
   - Clear lamp stats per level
-  - Rank stats per level
+  - Rank stats per level (incl. new B+ / A+ / AA+ ranks)
 - **Export Image** — Download your Pop'n Class Top 50 as a shareable PNG
 
 ## Usage
@@ -21,10 +26,10 @@ Visit the **[installation page](https://navi0105.github.io/Popn-Score-Tool/)** a
 
 ### Run
 
-1. Log in to the [Jam&Fizz page on e-amusement](https://p.eagate.573.jp/game/popn/jamfizz/index.html) (requires Basic Course)
-2. Click **Pop'n Score Tool** in your bookmarks bar
+1. Log in to the playdata page on e-amusement for your version of choice ([Jam&Fizz](https://p.eagate.573.jp/game/popn/jamfizz/index.html) or [High Cheers](https://p.eagate.573.jp/game/popn/popn29/index.html)) — requires Basic Course
+2. Click **Pop'n Score Tool** in your bookmarks bar — the UI shows which version was detected
 3. Click **Scrape** to start fetching your scores
-4. When finished, click **Export HTML** to get your offline viewer, or **Export Image** to get a shareable PNG
+4. When finished, click **View Results** to open the offline viewer, or **Export Image** to get a shareable PNG
 
 ### Manual Install
 
@@ -45,15 +50,16 @@ If you prefer not to use the hosted loader:
 | `docs/index.html` | GitHub Pages installation page |
 | `docs/bookmarklet.min.js` | Built JS loaded by the hosted bookmarklet (auto-generated) |
 
-## Future Works
+## Known Limitations
 
-### High Cheers Support
+### Pop'n Class formula on High Cheers
 
-Since I don't live in Japan, and all testing has been done with my own account, I currently have no High Cheers play data for testing. However, I'm planning a trip to Japan soon, and overseas High Cheers cabinets also seem to be launching in the near future -- so stay tuned.
+The community hasn't yet worked out High Cheers' new per-chart Pop'n Class formula. As a stand-in:
 
-### History Tracking
+- The **Official** Pop'n Class value is scraped directly from the status page, so the real current-version number is always shown.
+- The **Calculated (legacy)** Top 50 value carried over from earlier versions is still computed and displayed alongside it. It uses the old per-chart formula on NORMAL/HYPER/EX charts that have a level, so it diverges from the official number — but stays useful as a relative reference until the new formula is figured out.
 
-I don't intend to provide a centralized server for long-term score tracking like [iidx.me](https://iidx.me) or other score management services. That said, helping players see their growth over time is still a goal worth pursuing. One idea is to build an offline score management site similar to [Lampghost](https://github.com/Catizard/lampghost), which would allow long-term record keeping without requiring a server.
+I'm trying to reverse-engineer the new formula, but it really needs score data from more players to be tractable. **If you'd like to help, feel free to DM me and share your score table HTML** — more data points across different player profiles is exactly what's missing right now.
 
 ## License
 
