@@ -14,7 +14,10 @@ Plan: C:\Users\Navi\.claude\plans\sorted-snacking-pike.md
 - [x] A3: progress re-weighting + stop guards + deep-mode integration
 - [x] A5: finish()/openViewer hcClass wiring
 - [x] A5: PNG export HC layout (Top20 new + Top40 old)
-- [ ] rebuild + **user live-verification on HC** (+ Jam&Fizz regression) ← PENDING USER
+- [x] rebuild + user live-verification on HC: **calc 173.53 vs official 173.60 (diff 0.07)**,
+      EC variant 173.63; Phase E proved top-40 after 46 detail fetches; round-trip
+      recompute of exported scores matches stored hcClass exactly
+- [ ] Jam&Fizz regression scrape ← optional, pending user
 
 ## Step 3 — Viewer redesign
 - [x] Theme tokens + dark mode (auto + manual toggle)
@@ -44,9 +47,11 @@ Plan: C:\Users\Navi\.claude\plans\sorted-snacking-pike.md
   HC breakdown tables, mobile card rows, sticky matrix columns. Verified with Playwright
   at 1280/375px, light+dark, plus old-format DATA (graceful degradation) and both PNG
   export layouts.
-- Outstanding (needs the user's e-amusement session):
-  1. Live HC quick scrape — check log request counts, hcClass vs official value
-  2. Stop mid-Phase-D and mid-Phase-E — verify partial flag
-  3. Jam&Fizz regression scrape
-  4. Dump a PLAYED song's mu_detail (VERSION table with values) to harden the parser fixture
-  5. Regenerate examples/viewer.html + examples PNG from a real HC scrape
+- Live verification (2026-08-22): HC quick scrape succeeded — calc 173.53 vs official
+  173.60 (0.07 diff, EC 173.63 brackets it). examples/ refreshed with the real scrape.
+- Still optional / unverified:
+  1. Stop mid-Phase-D and mid-Phase-E — partial flag path untested live
+  2. Jam&Fizz regression scrape
+  3. A PLAYED song's raw mu_detail dump for the parser fixture (live run proves the
+     parser works — 138 charts resolved — but the offline fixture still only has an
+     unplayed sample)
