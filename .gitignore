@@ -7,3 +7,4 @@ tasks/test-harness/
 temp/
 install-local.html
 tools/fetch-medals.js
+.playwright-mcp/

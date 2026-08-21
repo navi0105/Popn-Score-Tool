@@ -9,14 +9,15 @@ A client-side bookmarklet that scrapes your pop'n music scores from the official
 ## Features
 
 - **Score Scraping** — Fetches scores by level (Lv 1~50) to get score, medal, and rank for every chart
-- **Pop'n Class** — Calculates the legacy Top 50 Pop'n Class rating with tier display. On High Cheers, the official Pop'n Class scraped from the status page is also shown side-by-side (the official per-chart formula isn't public yet, so the legacy calculation stays for cross-reference).
+- **Pop'n Class** — On High Cheers, calculates the current official formula (Top 20 new songs + Top 40 old songs, with old songs scored on their current-version score fetched from `mu_detail.html`) and shows it next to the official value scraped from the status page. The legacy Top-50 calculation is also kept for cross-reference (and remains the main calculation on Jam&Fizz).
 - **High Cheers extras** — でっかポップ君 / LIGHT charts are scraped from `mu_top.html` and shown as experimental data (LIGHT maps to the legacy `easy` slot since it replaces EASY; でっかポップ君 has no level info and is opt-in in the score browser).
 - **Export HTML** — Download a self-contained offline viewer with:
-  - Dual Pop'n Class card (calculated + official) + Top 50 table
-  - Sortable & filterable score browser
+  - Pop'n Class summary cards (official + HC-formula calc + legacy) with the New Top 20 / Old Top 40 breakdown and an「EASYクリアの歴代メダルを参照」toggle
+  - Sortable & filterable score browser (card layout on phones)
   - Clear lamp stats per level
   - Rank stats per level (incl. new B+ / A+ / AA+ ranks)
-- **Export Image** — Download your Pop'n Class Top 50 as a shareable PNG
+  - Dark mode (follows your system, with a manual toggle)
+- **Export Image** — Download a shareable PNG: New Top 20 + Old Top 40 on High Cheers, legacy Top 50 on Jam&Fizz
 
 ## Usage
 
@@ -54,12 +55,12 @@ If you prefer not to use the hosted loader:
 
 ### Pop'n Class formula on High Cheers
 
-The community hasn't yet worked out High Cheers' new per-chart Pop'n Class formula. As a stand-in:
+The tool implements the community-derived High Cheers formula (see [ssdh233/popn-class](https://github.com/ssdh233/popn-class)): per chart, `floor(floor(level × (3750 × level + medal_bonus + (score − 50000)) / 3881250, 8dp) × 60, 2dp)` for scores of 50000+, summed over the **Top 20 new songs + Top 40 old songs** and divided by 60. Remaining caveats:
 
-- The **Official** Pop'n Class value is scraped directly from the status page, so the real current-version number is always shown.
-- The **Calculated (legacy)** Top 50 value carried over from earlier versions is still computed and displayed alongside it. It uses the old per-chart formula on NORMAL/HYPER/EX charts that have a level, so it diverges from the official number — but stays useful as a relative reference until the new formula is figured out.
-
-I'm trying to reverse-engineer the new formula, but it really needs score data from more players to be tractable. **If you'd like to help, feel free to DM me and share your score table HTML** — more data points across different player profiles is exactly what's missing right now.
+- **Old songs use current-version scores**, which only appear on `mu_detail.html`. The scraper fetches details for the top candidate charts (best-first, stopping once the Top 40 is mathematically settled — typically 40–80 extra requests), so a quick scrape stays reasonably fast. Stopping mid-scrape yields a value marked *partial*.
+- The current-version **medal is inferred from the clear/FC/PERFECT counters** (the VERSION table shows no medal image), so fine-grained medal steps (◆/★ variants) may differ from the game's internal state; this only matters in rare bonus-tier edge cases.
+- Scope is **NORMAL/HYPER/EX** charts with a level — LIGHT and でっかポップ君 are outside the formula, matching the reference implementation.
+- The calculated value can still diverge from the official one by a small margin (rounding-boundary cases, stale official value between plays).
 
 ## License
 
@@ -68,4 +69,5 @@ MIT
 ## Acknowledgements
 
 1. [iidx.me](https://iidx.me): Its elegant IIDX score tracker and client-side scraping approach were a major inspiration for this tool
-2. [Claude Code](https://claude.ai/claude-code)
+2. [ssdh233/popn-class](https://github.com/ssdh233/popn-class): The reference implementation of the High Cheers Pop'n Class formula that this tool replicates
+3. [Claude Code](https://claude.ai/claude-code)

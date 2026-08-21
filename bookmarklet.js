@@ -20,7 +20,7 @@
     // and "ALL" is value="-1". Using the wrong value silently drops ~99% of the catalog.
     var SUPPORTED_VERSIONS = {
         'jamfizz': { base: '/game/popn/jamfizz', label: 'Jam&Fizz',    hasMuTop: false, hasOfficialClass: false, verAll: '0'  },
-        'popn29':  { base: '/game/popn/popn29',  label: 'High Cheers', hasMuTop: true,  hasOfficialClass: true,  verAll: '-1' },
+        'popn29':  { base: '/game/popn/popn29',  label: 'High Cheers', hasMuTop: true,  hasOfficialClass: true,  verAll: '-1', verNew: '29' },
     };
     function detectVersion() {
         var path = location.pathname || '';
@@ -34,10 +34,16 @@
     var MAX_LEVEL = 50;
     var PAGE_DELAY = 400;
     var DETAIL_DELAY = 300;
+    // HC formula: how many old-chart candidates (sorted by lifetime point) may
+    // get a mu_detail fetch before we give up proving the top-40 bound.
+    var HC_OLD_CANDIDATES = 120;
 
     // ========== State ==========
     var isRunning = false;
     var stopRequested = false;
+    // Bookkeeping for the HC old-chart version-score resolution phase,
+    // consumed by finish() -> calcHcClass(). null on versions without verNew.
+    var hcScrapeMeta = null;
     var collectedData = {
         player: null,
         scores: [],
@@ -48,6 +54,7 @@
 
     var MEDAL_MAP = {
         'meda_none': 'no_play',
+        'meda_l': 'assist_clear',
         'meda_k': 'easy_clear',
         'meda_j': 'failed_1',
         'meda_i': 'failed_2',
@@ -318,11 +325,20 @@
 
     // ========== URL builders ==========
 
-    function buildMuLvURL(lv, page) {
-        var verAll = (VERSION && VERSION.verAll) || '0';
+    function buildMuLvURL(lv, page, versionOverride) {
+        var ver = versionOverride != null ? versionOverride : ((VERSION && VERSION.verAll) || '0');
         return VERSION_BASE + '/playdata/mu_lv.html?page=' + page
-            + '&version=' + verAll + '&bemani=0&category=0&keyword=&lv=' + lv
+            + '&version=' + ver + '&bemani=0&category=0&keyword=&lv=' + lv
             + '&sort=music&sort_type=up';
+    }
+
+    // The no= token in mu_detail links is the only per-song identity we have.
+    // It's an opaque (encrypted) value but stable within a session, so it works
+    // as a cross-listing join key (mu_lv ALL sweep vs version=29 sweep).
+    function extractSongNo(detailUrl) {
+        if (!detailUrl) return null;
+        var m = detailUrl.match(/[?&]no=([^&]+)/);
+        return m ? m[1] : null;
     }
 
     function buildMuTopURL(page) {
@@ -573,6 +589,9 @@
      *   - div.item_st  play options
      */
     function parseDetailPage(doc) {
+        // Dispatch: High Cheers uses div.mu_detail_tb sections; Jam&Fizz div.dif_tbl.
+        if (doc.querySelector('div.mu_detail_tb')) return parseDetailPageHC(doc);
+
         var detail = {};
 
         var titleEl = doc.querySelector('#title');
@@ -653,6 +672,130 @@
             }
 
             detail[diffName] = chartDetail;
+        }
+
+        return detail;
+    }
+
+    /**
+     * Parse the High Cheers song detail page (mu_detail.html)
+     *
+     * Structure: div.mu_detail_tb#light / #normal / #hyper / #ex, each holding
+     * TWO tables — first the lifetime record (▼歴代: score row with medal/rank
+     * <img>s, judge counts, play counters), then the current-version record
+     * (▼VERSION: score + play/clear/FC/PERFECT counters only, no medal image).
+     * Cell values are '-' / '-回' when absent, 'N回' for counters.
+     *
+     * LIGHT is stored under 'easy' to match the charts data model. Each diff:
+     *   { score, medal, rank, cool, great, good, bad, highlight,
+     *     playCount, clearCount, fcCount, perfectCount, options,
+     *     version: { score, playCount, clearCount, fcCount, perfectCount } }
+     */
+    function parseHcCellNum(text) {
+        if (text == null) return null;
+        var t = String(text).trim();
+        if (t === '' || t === '-' || t === '-回') return null;
+        var n = parseInt(t.replace(/[^0-9]/g, ''), 10);
+        return isNaN(n) ? null : n;
+    }
+
+    function parseHcDetailTable(tbl) {
+        var out = {};
+        var rows = tbl.querySelectorAll('tr');
+        for (var ri = 0; ri < rows.length; ri++) {
+            var row = rows[ri];
+            var valEl = row.querySelector('td.play_value');
+            if (!valEl) continue;
+            var val = parseHcCellNum(valEl.textContent);
+            var label = row.firstElementChild ? row.firstElementChild.textContent.trim() : '';
+            if (row.classList.contains('score')) {
+                out.score = val;
+            } else if (label === 'COOL') {
+                out.cool = val;
+            } else if (label === 'GREAT') {
+                out.great = val;
+            } else if (label === 'GOOD') {
+                out.good = val;
+            } else if (label === 'BAD') {
+                out.bad = val;
+            } else if (label.indexOf('ハイライト') >= 0) {
+                out.highlight = val;
+            } else if (label.indexOf('プレー回数') >= 0) {
+                out.playCount = val;
+            } else if (label.indexOf('クリア回数') >= 0) {
+                out.clearCount = val;
+            } else if (label === 'FULL COMBO回数') {
+                out.fcCount = val;
+            } else if (label === 'PERFECT回数') {
+                out.perfectCount = val;
+            }
+        }
+        return out;
+    }
+
+    function parseDetailPageHC(doc) {
+        var detail = {};
+
+        var titleEl = doc.querySelector('#title');
+        if (titleEl) detail.title = titleEl.textContent.trim();
+
+        var artistEl = doc.querySelector('#artist');
+        if (artistEl) detail.artist = artistEl.textContent.trim();
+
+        var sections = ['light', 'normal', 'hyper', 'ex'];
+        for (var si = 0; si < sections.length; si++) {
+            var secName = sections[si];
+            var section = doc.querySelector('div.mu_detail_tb#' + secName);
+            if (!section) continue;
+
+            var chartDetail = {};
+            var tables = section.querySelectorAll('table');
+
+            if (tables[0]) {
+                var lifetime = parseHcDetailTable(tables[0]);
+                for (var k in lifetime) chartDetail[k] = lifetime[k];
+
+                // Medal & rank live as plain <img>s inside the lifetime score row
+                var medalTd = tables[0].querySelector('td.medal');
+                if (medalTd) {
+                    var imgs = medalTd.querySelectorAll('img');
+                    for (var ii = 0; ii < imgs.length; ii++) {
+                        var src = imgs[ii].getAttribute('src') || '';
+                        var mMatch = src.match(/meda_big_([a-z_]+)\.png/);
+                        if (mMatch) {
+                            var medalKey = 'meda_' + mMatch[1];
+                            chartDetail.medal = MEDAL_MAP[medalKey] || medalKey;
+                        }
+                        var rMatch = src.match(/rank_big_([a-z0-9_]+)\.png/);
+                        if (rMatch) {
+                            var rankKey = 'rank_' + rMatch[1];
+                            chartDetail.rank = RANK_MAP[rankKey] !== undefined ? RANK_MAP[rankKey] : rankKey;
+                        }
+                    }
+                }
+            }
+
+            if (tables[1]) {
+                var ver = parseHcDetailTable(tables[1]);
+                chartDetail.version = {
+                    score: ver.score,
+                    playCount: ver.playCount,
+                    clearCount: ver.clearCount,
+                    fcCount: ver.fcCount,
+                    perfectCount: ver.perfectCount,
+                };
+            }
+
+            var optEl = section.querySelector('div.item_st');
+            if (optEl) {
+                var optText = optEl.textContent.trim();
+                if (optText && optText.indexOf('オプション未保存') < 0) {
+                    chartDetail.options = optText.replace(/\s{2,}/g, ' ').trim();
+                }
+            }
+
+            // LIGHT occupies the legacy 'easy' slot in the charts data model
+            detail[secName === 'light' ? 'easy' : secName] = chartDetail;
         }
 
         return detail;
@@ -864,6 +1007,7 @@
         if (isRunning) return;
         isRunning = true;
         stopRequested = false;
+        hcScrapeMeta = null;
         collectedData.scores = [];
         setButtonState('running');
         setProgress(0);
@@ -907,12 +1051,15 @@
 
             // Step 2: Scrape mu_lv.html level by level (lv=1~50)
             var songMap = {};
+            var lvProgressScale = (VERSION && VERSION.verNew) ? 0.70 : 1;
 
             for (var lv = 1; lv <= MAX_LEVEL; lv++) {
                 if (stopRequested) { finish('Stopped (lv ' + lv + ')'); return; }
 
                 setMsg1(modeLabel + ': Level ' + lv + '/' + MAX_LEVEL);
-                setProgress((lv - 1) / MAX_LEVEL);
+                // On HC the level sweep is 70% of the quick scrape; the rest is
+                // mu_top / new-song tagging / version-score resolution.
+                setProgress((lv - 1) / MAX_LEVEL * lvProgressScale);
 
                 var firstURL = buildMuLvURL(lv, 0);
                 log('<- Lv.' + lv + ' p1');
@@ -978,8 +1125,54 @@
                         break;
                     }
                     muTopPage++;
+                    setProgress(0.70 + 0.08 * Math.min(muTopPage / muTopTotalPages, 1));
                     if (muTopPage < muTopTotalPages) await delay(PAGE_DELAY);
                 }
+            }
+
+            // Step 2.6: HC formula prep — sweep mu_lv with version=<current release>
+            // to tag which charts are "new songs" (their lifetime score equals the
+            // current-version score, so the official formula can use it directly).
+            if (VERSION && VERSION.verNew && !stopRequested) {
+                setMsg1('Tagging new songs (version=' + VERSION.verNew + ')...');
+                var noToSong = {};
+                var titleToSong = {};
+                for (var smKey in songMap) {
+                    var smSong = songMap[smKey];
+                    var smTok = extractSongNo(smSong.detailUrl);
+                    if (smTok) noToSong[smTok] = smSong;
+                    titleToSong[smSong.title + '|' + smSong.genre] = smSong;
+                }
+
+                var newTagged = 0, newMiss = 0;
+                for (var nlv = 1; nlv <= MAX_LEVEL; nlv++) {
+                    if (stopRequested) { finish('Stopped (new-song lv ' + nlv + ')'); return; }
+                    setProgress(0.78 + 0.12 * (nlv - 1) / MAX_LEVEL);
+                    setMsg2('New songs: Lv.' + nlv + '/' + MAX_LEVEL + ' | tagged ' + newTagged);
+
+                    var nsPage = 0;
+                    var nsTotalPages = 1;
+                    while (nsPage < nsTotalPages) {
+                        if (stopRequested) { finish('Stopped (new-song lv ' + nlv + ')'); return; }
+                        var nsHTML = await fetchPage(buildMuLvURL(nlv, nsPage, VERSION.verNew));
+                        var nsDoc = parseHTML(nsHTML);
+                        if (nsPage === 0) nsTotalPages = getTotalPages(nsDoc);
+                        var nsEntries = parseMuLvPage(nsDoc);
+                        if (nsEntries.length === 0) break;
+                        for (var ne = 0; ne < nsEntries.length; ne++) {
+                            var nsEntry = nsEntries[ne];
+                            var nsTok = extractSongNo(nsEntry.detailUrl);
+                            var nsTarget = (nsTok && noToSong[nsTok]) || titleToSong[nsEntry.title + '|' + nsEntry.genre];
+                            if (!nsTarget) { newMiss++; continue; }
+                            var nsChart = nsTarget.charts[nsEntry.difficulty];
+                            if (nsChart) { nsChart.isNew = true; newTagged++; }
+                        }
+                        nsPage++;
+                        if (nsPage < nsTotalPages) await delay(PAGE_DELAY);
+                    }
+                    await delay(PAGE_DELAY);
+                }
+                log('New-song tagging: ' + newTagged + ' charts' + (newMiss ? ' (' + newMiss + ' unmatched!)' : ''));
             }
 
             // Convert to array and mark Upper charts
@@ -1005,6 +1198,7 @@
                         log('<- detail: ' + song.title);
                         var detailHTML = await fetchPage(song.detailUrl);
                         song.detail = parseDetailPage(parseHTML(detailHTML));
+                        if (VERSION && VERSION.verNew) applyHcDetail(song, song.detail);
                         detailCount++;
                     } catch (err) {
                         log('detail err (' + song.title + '): ' + err.message);
@@ -1015,6 +1209,98 @@
                 }
 
                 log('Deep scrape done: ' + detailCount + ' details fetched');
+            }
+
+            // Step 4: HC formula — resolve current-version scores for old-chart
+            // candidates via mu_detail. Old charts must be scored with the
+            // current-version score; the lifetime point is an upper bound on the
+            // version point, so we fetch candidates best-first and stop as soon
+            // as the top-40 selection is proven.
+            if (VERSION && VERSION.verNew && !stopRequested) {
+                hcScrapeMeta = { candidateCount: 0, fetchedSongs: 0, cutoffPoint: null, complete: false };
+                var hcDiffs = ['normal', 'hyper', 'ex'];
+                var candidates = [];
+                for (var hi = 0; hi < collectedData.scores.length; hi++) {
+                    var hcSong = collectedData.scores[hi];
+                    for (var hd = 0; hd < hcDiffs.length; hd++) {
+                        var hcChart = (hcSong.charts || {})[hcDiffs[hd]];
+                        if (!hcChart || !hcChart.level || hcChart.isNew) continue;
+                        var lifetimePt = calcHcChartPoint(hcChart.level, hcChart.score || 0, hcChart.medal);
+                        if (lifetimePt <= 0) continue;
+                        candidates.push({ song: hcSong, chart: hcChart, lifetimePt: lifetimePt });
+                    }
+                }
+                candidates.sort(function(a, b) { return b.lifetimePt - a.lifetimePt; });
+                candidates = candidates.slice(0, HC_OLD_CANDIDATES);
+                hcScrapeMeta.candidateCount = candidates.length;
+
+                var resolvedPoints = function() {
+                    var pts = [];
+                    for (var ci = 0; ci < candidates.length; ci++) {
+                        var cc = candidates[ci].chart;
+                        if (!cc.hcResolved) continue;
+                        var em = effectiveHcMedal(cc.medal, cc.versionMedal, false);
+                        pts.push(calcHcChartPoint(cc.level, cc.versionScore || 0, em));
+                    }
+                    pts.sort(function(a, b) { return b - a; });
+                    return pts;
+                };
+
+                // Deep mode already resolved every song's detail — nothing to fetch.
+                var unresolved = candidates.filter(function(cand) { return !cand.chart.hcResolved; });
+                if (unresolved.length === 0) {
+                    hcScrapeMeta.fetchedSongs = 0;
+                    hcScrapeMeta.complete = true;
+                    var deepPts = resolvedPoints();
+                    if (deepPts.length >= 40) hcScrapeMeta.cutoffPoint = deepPts[39];
+                } else {
+                    setMsg1('Resolving current-version scores (old songs)...');
+                    // One mu_detail fetch resolves all difficulties of a song.
+                    var fetchQueue = [];
+                    var queuedSongs = {};
+                    for (var ui = 0; ui < unresolved.length; ui++) {
+                        var uKey = unresolved[ui].song.detailUrl || unresolved[ui].song.title;
+                        if (!queuedSongs[uKey]) { queuedSongs[uKey] = true; fetchQueue.push(unresolved[ui].song); }
+                    }
+                    log('Version scores: ' + candidates.length + ' candidate charts / ' + fetchQueue.length + ' songs to check');
+
+                    for (var qi = 0; qi < fetchQueue.length; qi++) {
+                        if (stopRequested) { finish('Stopped (version scores ' + qi + '/' + fetchQueue.length + ')'); return; }
+                        var qSong = fetchQueue[qi];
+                        setMsg2('Version score ' + (qi + 1) + '/' + fetchQueue.length + ': ' + qSong.title);
+                        setProgress(0.90 + 0.10 * qi / fetchQueue.length);
+                        try {
+                            log('<- version score: ' + qSong.title);
+                            var qHTML = await fetchPage(qSong.detailUrl);
+                            applyHcDetail(qSong, parseDetailPage(parseHTML(qHTML)));
+                            hcScrapeMeta.fetchedSongs++;
+                        } catch (qErr) {
+                            log('version-score err (' + qSong.title + '): ' + qErr.message);
+                        }
+
+                        // Early stop: the top-40 is proven once the 40th-best resolved
+                        // point >= the best unresolved candidate's lifetime point.
+                        var pts = resolvedPoints();
+                        if (pts.length >= 40) {
+                            var nextUnresolvedPt = null;
+                            for (var ni = 0; ni < candidates.length; ni++) {
+                                if (!candidates[ni].chart.hcResolved) { nextUnresolvedPt = candidates[ni].lifetimePt; break; }
+                            }
+                            if (nextUnresolvedPt === null || pts[39] >= nextUnresolvedPt) {
+                                hcScrapeMeta.cutoffPoint = pts[39];
+                                hcScrapeMeta.complete = true;
+                                log('Version scores: top-40 proven after ' + hcScrapeMeta.fetchedSongs + ' songs (cutoff ' + pts[39].toFixed(2) + ')');
+                                break;
+                            }
+                        }
+                        await delay(DETAIL_DELAY);
+                    }
+                    if (!hcScrapeMeta.complete) {
+                        // Exhausted the candidate pool — everything fetchable was fetched.
+                        hcScrapeMeta.complete = true;
+                        log('Version scores: candidate pool exhausted (' + hcScrapeMeta.fetchedSongs + ' songs fetched)');
+                    }
+                }
             }
 
             finish('Complete! ' + totalSongs + ' songs' + (deepMode ? ' (with details)' : ''));
@@ -1038,16 +1324,25 @@
             collectedData.officialClass = collectedData.player.officialClass;
         }
 
-        // Calculate legacy Pop'n Class
+        // Calculate legacy Pop'n Class (+ official HC formula where supported)
         if (collectedData.scores.length > 0) {
             var pc = calcPopClass(collectedData.scores);
             collectedData.popClass = pc;
-            var summary = msg + " | Pop'n Class (calc): " + pc.value.toFixed(2) + ' (' + pc.tier + ')';
+            var summary = msg + " | Pop'n Class (legacy calc): " + pc.value.toFixed(2) + ' (' + pc.tier + ')';
+            if (VERSION && VERSION.verNew) {
+                var hc = calcHcClass(collectedData.scores, hcScrapeMeta);
+                collectedData.hcClass = hc;
+                summary += ' | HC formula: ' + hc.value.toFixed(2) + (hc.complete ? '' : ' [partial]');
+                log("Pop'n Class (HC formula): " + hc.value.toFixed(2)
+                    + ' (new ' + hc.newSum.toFixed(2) + ' + old ' + hc.oldSum.toFixed(2) + ')'
+                    + (hc.complete ? '' : ' [partial data]'));
+                log('HC formula w/ historical EASY-clear medals: ' + hc.valueEC.toFixed(2));
+            }
             if (collectedData.officialClass && collectedData.officialClass.value != null) {
                 summary += ' | Official: ' + collectedData.officialClass.value.toFixed(2);
             }
             setMsg1(summary);
-            log("Pop'n Class (calc): " + pc.value.toFixed(2) + ' (' + pc.tier + ') from ' + pc.count + ' scored charts');
+            log("Pop'n Class (legacy calc): " + pc.value.toFixed(2) + ' (' + pc.tier + ') from ' + pc.count + ' scored charts');
             if (collectedData.officialClass && collectedData.officialClass.value != null) {
                 log("Pop'n Class (official): " + collectedData.officialClass.value.toFixed(2) + ' (tier ' + collectedData.officialClass.tierIndex + ')');
             }
@@ -1117,6 +1412,176 @@
         return { value: avg, tier: tier, count: pts.length };
     }
 
+    // ========== High Cheers Pop'n Class (official per-chart formula) ==========
+    //
+    // Replicates https://github.com/ssdh233/popn-class (index-hc.js) bit-for-bit:
+    //   chart point (x60-scaled) =
+    //     floorTo(floorTo(level * (3750*level + bonus + (score-50000)) / 3881250, 8) * 60, 2)
+    //   total = floorTo(roundTo(sum(top20 new + top40 old points), 8) / 60, 2)
+    // New songs (version=29 catalog) use lifetime score directly (lifetime == version).
+    // Old songs must use CURRENT-VERSION score/medal from mu_detail.html.
+
+    function floorTo(x, p) {
+        var m = Math.pow(10, p);
+        return Math.floor(x * m) / m;
+    }
+
+    function roundTo(x, p) {
+        var m = Math.pow(10, p);
+        return Math.round(x * m) / m;
+    }
+
+    // Official medal-letter bonus table mapped onto our semantic medal names.
+    // a=21250, b/c/d=17500, e/f/g=12500, l=10000, k=6250, h/i/j/none=0.
+    function hcMedalBonus(medal) {
+        if (!medal) return 0;
+        if (medal === 'perfect') return 21250;
+        if (medal.indexOf('full_combo') === 0) return 17500;
+        if (medal.indexOf('normal_clear') === 0) return 12500;
+        if (medal === 'assist_clear') return 10000;
+        if (medal === 'easy_clear') return 6250;
+        return 0;
+    }
+
+    function calcHcChartPoint(level, score, medal) {
+        if (!level || level <= 0) return 0;
+        if (!score || score < 50000) return 0;
+        var inner = floorTo(level * (3750 * level + hcMedalBonus(medal) + (score - 50000)) / 3881250, 8);
+        return floorTo(inner * 60, 2);
+    }
+
+    // The VERSION table on mu_detail has no medal image — infer it from the
+    // clear/FC/PERFECT counters (mirrors the reference: a / b / e / h).
+    function inferVersionMedal(counts) {
+        if (!counts) return 'no_play';
+        if (counts.perfectCount > 0) return 'perfect';
+        if (counts.fcCount > 0) return 'full_combo';
+        if (counts.clearCount > 0) return 'normal_clear';
+        return 'failed_3';
+    }
+
+    // Effective medal for an old chart: keep the (more precise) lifetime medal
+    // when its bonus tier matches the inferred version medal, else trust the
+    // version medal. With useEC on, a lifetime EASY clear survives an uncleared
+    // version medal (the official game appears to honor it).
+    function effectiveHcMedal(histMedal, verMedal, useEC) {
+        if (useEC && histMedal === 'easy_clear' && hcMedalBonus(verMedal) === 0) return 'easy_clear';
+        return hcMedalBonus(verMedal) === hcMedalBonus(histMedal) ? histMedal : verMedal;
+    }
+
+    // x60-scaled sum -> display value (2dp, floor), matching the reference chain.
+    function hcSumToDisplay(entries) {
+        var sum = 0;
+        for (var i = 0; i < entries.length; i++) sum += entries[i].point;
+        return floorTo(roundTo(sum, 8) / 60, 2);
+    }
+
+    // Pick the top-40 old charts for a given EASY-clear toggle state.
+    // Entries carry both variants precomputed (point / pointEC).
+    function hcTop40Old(oldResolved, useEC) {
+        var list = oldResolved.map(function(e) {
+            return {
+                title: e.title, genre: e.genre, diff: e.diff, level: e.level,
+                score: e.versionScore, medal: useEC ? e.medalEC : e.medal,
+                lifetimeScore: e.lifetimeScore, lifetimeMedal: e.lifetimeMedal,
+                versionMedal: e.versionMedal,
+                point: useEC ? e.pointEC : e.point,
+            };
+        });
+        list.sort(function(a, b) { return b.point - a.point; });
+        return list.slice(0, 40);
+    }
+
+    // Copy the current-version score/medal from a parsed HC detail page onto the
+    // song's chart objects. Deliberately separate fields — mergeEntry's
+    // "first real score wins" upgrade logic must never see version scores.
+    function applyHcDetail(song, detail) {
+        if (!song || !detail) return;
+        var diffs = ['normal', 'hyper', 'ex'];
+        for (var di = 0; di < diffs.length; di++) {
+            var d = diffs[di];
+            var c = song.charts && song.charts[d];
+            var dd = detail[d];
+            if (!c || !dd || !dd.version) continue;
+            c.versionScore = dd.version.score || 0;
+            c.versionMedal = inferVersionMedal(dd.version);
+            c.hcResolved = true;
+        }
+    }
+
+    /**
+     * Compute the HC-formula class from collected scores.
+     *
+     * Relies on per-chart fields written during scraping:
+     *   chart.isNew        — chart appears in the version=29 (new songs) catalog
+     *   chart.hcResolved   — mu_detail was fetched; versionScore/versionMedal valid
+     *   chart.versionScore — current-version score (0 if unplayed this version)
+     *   chart.versionMedal — inferred current-version medal
+     *
+     * Only NORMAL/HYPER/EX charts with a level participate (mu_lv scope — LIGHT
+     * and でっかポップ君 are outside the official formula, matching the reference).
+     */
+    function calcHcClass(scores, meta) {
+        var newCharts = [];
+        var oldResolved = [];
+        var diffs = ['normal', 'hyper', 'ex'];
+        for (var si = 0; si < scores.length; si++) {
+            var song = scores[si];
+            var charts = song.charts || {};
+            for (var di = 0; di < diffs.length; di++) {
+                var d = diffs[di];
+                var c = charts[d];
+                if (!c || !c.level) continue;
+                if (c.isNew) {
+                    var np = calcHcChartPoint(c.level, c.score || 0, c.medal);
+                    if (np > 0) {
+                        newCharts.push({
+                            title: song.title, genre: song.genre, diff: d,
+                            level: c.level, score: c.score || 0, medal: c.medal, point: np,
+                        });
+                    }
+                } else if (c.hcResolved) {
+                    var em = effectiveHcMedal(c.medal, c.versionMedal, false);
+                    var emEC = effectiveHcMedal(c.medal, c.versionMedal, true);
+                    oldResolved.push({
+                        title: song.title, genre: song.genre, diff: d,
+                        level: c.level,
+                        lifetimeScore: c.score || 0, lifetimeMedal: c.medal,
+                        versionScore: c.versionScore || 0, versionMedal: c.versionMedal,
+                        medal: em, point: calcHcChartPoint(c.level, c.versionScore || 0, em),
+                        medalEC: emEC, pointEC: calcHcChartPoint(c.level, c.versionScore || 0, emEC),
+                    });
+                }
+            }
+        }
+
+        newCharts.sort(function(a, b) { return b.point - a.point; });
+        var top20New = newCharts.slice(0, 20);
+        var top40Old = hcTop40Old(oldResolved, false);
+        var top40OldEC = hcTop40Old(oldResolved, true);
+
+        var newSum = hcSumToDisplay(top20New);
+        var oldSum = hcSumToDisplay(top40Old);
+        var oldSumEC = hcSumToDisplay(top40OldEC);
+
+        var result = {
+            value: hcSumToDisplay(top20New.concat(top40Old)),
+            valueEC: hcSumToDisplay(top20New.concat(top40OldEC)),
+            newSum: newSum, oldSum: oldSum, oldSumEC: oldSumEC,
+            top20New: top20New,
+            oldResolved: oldResolved,
+            newChartCount: newCharts.length,
+            resolvedCount: oldResolved.length,
+        };
+        if (meta) {
+            result.candidateCount = meta.candidateCount;
+            result.fetchedSongs = meta.fetchedSongs;
+            result.cutoffPoint = meta.cutoffPoint;
+            result.complete = meta.complete;
+        }
+        return result;
+    }
+
     // ========== Export ==========
 
     function exportJSON() {
@@ -1124,6 +1589,7 @@
             player: collectedData.player,
             scores: collectedData.scores,
             popClass: collectedData.popClass,
+            hcClass: collectedData.hcClass,
             officialClass: collectedData.officialClass,
             medalImages: collectedData.medalImages,
             version: VERSION ? VERSION.label : null,
@@ -1143,7 +1609,7 @@
     }
 
     var MEDAL_LABELS = {
-        'no_play': 'No Play', 'easy_clear': '\u7dd1\u2b24',
+        'no_play': 'No Play', 'assist_clear': 'ASSIST', 'easy_clear': '\u7dd1\u2b24',
         'failed_1': '\u7070\u2b24', 'failed_2': '\u7070\u25c6', 'failed_3': '\u7070\u2605',
         'normal_clear': '\u9285\u2b24', 'normal_clear_in_20_bad': '\u9285\u25c6', 'normal_clear_in_5_bad': '\u9285\u2605',
         'full_combo': '\u9280\u2b24', 'full_combo_in_20_good': '\u9280\u25c6', 'full_combo_in_5_good': '\u9280\u2605',
@@ -1151,7 +1617,7 @@
     };
 
     var MEDAL_COLORS = {
-        'no_play': '#bbb', 'easy_clear': '#2ea868',
+        'no_play': '#bbb', 'assist_clear': '#7fb8d8', 'easy_clear': '#2ea868',
         'failed_1': '#999', 'failed_2': '#999', 'failed_3': '#999',
         'normal_clear': '#b87333', 'normal_clear_in_20_bad': '#b87333', 'normal_clear_in_5_bad': '#b87333',
         'full_combo': '#888', 'full_combo_in_20_good': '#888', 'full_combo_in_5_good': '#888',
@@ -1182,6 +1648,14 @@
 
     function exportClassImage() {
         if (collectedData.scores.length === 0) return;
+
+        // High Cheers: export the official-formula breakdown (Top 20 new + Top 40 old)
+        if (VERSION && VERSION.verNew && collectedData.hcClass) {
+            loadMedalSprites().then(function(medalImgs) {
+                renderHcClassImage(collectedData.hcClass, medalImgs);
+            });
+            return;
+        }
 
         // Build top 50 chart list
         var chartPts = [];
@@ -1351,6 +1825,161 @@
         }
     }
 
+    // High Cheers share image: three 20-row tables side by side —
+    // [ New Top 20 | Old Top 40 #1-20 | Old Top 40 #21-40 ].
+    function renderHcClassImage(hc, medalImgs) {
+        var rowH = 28;
+        var headerH = 40;
+        var titleH = 64;
+        var labelH = 24;
+        var footerH = 30;
+        var colGap = 16;
+        var cols = [34, 250, 54, 34, 60, 50, 60];
+        var tableW = 0;
+        for (var ci = 0; ci < cols.length; ci++) tableW += cols[ci];
+        tableW += 16;
+
+        var top40 = hcTop40Old(hc.oldResolved, false);
+        var lists = [
+            { label: 'NEW SONGS  TOP 20', entries: hc.top20New, rankStart: 1 },
+            { label: 'OLD SONGS  TOP 40 (1-20)', entries: top40.slice(0, 20), rankStart: 1 },
+            { label: 'OLD SONGS  TOP 40 (21-40)', entries: top40.slice(20, 40), rankStart: 21 },
+        ];
+
+        var totalW = tableW * 3 + colGap * 2;
+        var totalH = titleH + labelH + headerH + (20 * rowH) + footerH;
+
+        var canvas = document.createElement('canvas');
+        canvas.width = totalW;
+        canvas.height = totalH;
+        var ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = '#fef6f0';
+        ctx.fillRect(0, 0, totalW, totalH);
+
+        ctx.fillStyle = '#e94560';
+        ctx.font = 'bold 24px Segoe UI, sans-serif';
+        ctx.fillText("Pop'n Score Tool", 10, 30);
+        var titleRight = 10 + ctx.measureText("Pop'n Score Tool").width + 16;
+        var chara = collectedData.player && collectedData.player['使用キャラクター'];
+        var avatarSize = 36;
+        var hasAvatar = chara && chara.imgData;
+        var textLeft = hasAvatar ? titleRight + avatarSize + 8 : titleRight;
+
+        ctx.fillStyle = '#3d2b1f';
+        ctx.font = '16px Segoe UI, sans-serif';
+        var playerName = (collectedData.player && collectedData.player['プレーヤー名']) || '';
+        var classLine = playerName + "  Pop'n Class (calc): " + hc.value.toFixed(2)
+            + ' = new ' + hc.newSum.toFixed(2) + ' + old ' + hc.oldSum.toFixed(2);
+        if (collectedData.officialClass && typeof collectedData.officialClass.value === 'number') {
+            classLine += '   Official: ' + collectedData.officialClass.value.toFixed(2);
+        }
+        ctx.fillText(classLine, textLeft, 30);
+        ctx.fillStyle = '#907860';
+        ctx.font = '11px Segoe UI, sans-serif';
+        var subLine = 'High Cheers formula (Top 20 new + Top 40 old)';
+        if (collectedData.popClass) subLine += '  |  Legacy Top-50 calc: ' + collectedData.popClass.value.toFixed(2);
+        if (!hc.complete) subLine += '  |  PARTIAL DATA (scrape stopped early)';
+        ctx.fillText(subLine, textLeft, 50);
+
+        var headers = ['#', 'Genre / Title', 'Diff', 'Lv', 'Score', 'Medal', 'Pts'];
+
+        function drawList(list, offsetX) {
+            ctx.fillStyle = '#e94560';
+            ctx.font = 'bold 13px Segoe UI, sans-serif';
+            ctx.fillText(list.label, offsetX + 8, titleH + 14);
+
+            var y = titleH + labelH;
+            ctx.fillStyle = '#ffe0d0';
+            ctx.fillRect(offsetX, y, tableW, headerH);
+            ctx.fillStyle = '#907860';
+            ctx.font = 'bold 12px Segoe UI, sans-serif';
+            var x = offsetX + 8;
+            for (var hi = 0; hi < headers.length; hi++) {
+                ctx.fillText(headers[hi], x, y + 26);
+                x += cols[hi];
+            }
+
+            y += headerH;
+            ctx.font = '12px Segoe UI, sans-serif';
+            for (var ri = 0; ri < list.entries.length; ri++) {
+                var c = list.entries[ri];
+                if (ri % 2 === 0) {
+                    ctx.fillStyle = '#fff0ea';
+                    ctx.fillRect(offsetX, y, tableW, rowH);
+                }
+
+                x = offsetX + 8;
+                ctx.fillStyle = '#907860';
+                ctx.fillText((list.rankStart + ri).toString(), x, y + 19);
+                x += cols[0];
+
+                ctx.fillStyle = '#3d2b1f';
+                var baseTitle = c.title.replace(/ \[UPPER\]$/, '');
+                var t = (!c.genre || c.genre === baseTitle) ? c.title : (c.genre + ' / ' + c.title);
+                if (t.length > 28) t = t.substring(0, 26) + '...';
+                ctx.fillText(t, x, y + 19);
+                x += cols[1];
+
+                ctx.fillStyle = DIFF_COLORS[c.diff] || '#3d2b1f';
+                ctx.fillText(DIFF_LABELS[c.diff] || c.diff.toUpperCase(), x, y + 19);
+                x += cols[2];
+
+                ctx.fillStyle = '#3d2b1f';
+                ctx.fillText(c.level.toString(), x, y + 19);
+                x += cols[3];
+
+                ctx.fillText(c.score > 0 ? c.score.toString() : '-', x, y + 19);
+                x += cols[4];
+
+                var medalImg = medalImgs[c.medal];
+                if (medalImg) {
+                    var medalSize = 22;
+                    ctx.drawImage(medalImg, x, y + (rowH - medalSize) / 2, medalSize, medalSize);
+                } else {
+                    ctx.fillStyle = MEDAL_COLORS[c.medal] || '#907860';
+                    ctx.fillText(MEDAL_LABELS[c.medal] || c.medal || '-', x, y + 19);
+                }
+                x += cols[5];
+
+                ctx.fillStyle = '#e94560';
+                ctx.fillText(floorTo(c.point / 60, 3).toFixed(3), x, y + 19);
+
+                y += rowH;
+            }
+        }
+
+        for (var li = 0; li < lists.length; li++) {
+            drawList(lists[li], li * (tableW + colGap));
+        }
+
+        ctx.fillStyle = '#907860';
+        ctx.font = '10px Segoe UI, sans-serif';
+        ctx.fillText("Generated by Pop'n Score Tool | " + (collectedData.exportedAt || ''), 10, totalH - 10);
+
+        function doDownload() {
+            var link = document.createElement('a');
+            link.download = 'popn_class_hc.png';
+            link.href = canvas.toDataURL('image/png');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            log("Exported Pop'n Class image (HC formula)");
+        }
+
+        if (hasAvatar) {
+            var avatarImg = new Image();
+            avatarImg.onload = function() {
+                ctx.drawImage(avatarImg, titleRight, 12, avatarSize, avatarSize);
+                doDownload();
+            };
+            avatarImg.onerror = doDownload;
+            avatarImg.src = chara.imgData;
+        } else {
+            doDownload();
+        }
+    }
+
     // viewer-template.html is embedded at build time
     var VIEWER_TEMPLATE = '{{VIEWER_TEMPLATE}}';
 
@@ -1359,6 +1988,7 @@
             player: collectedData.player,
             scores: collectedData.scores,
             popClass: collectedData.popClass,
+            hcClass: collectedData.hcClass,
             officialClass: collectedData.officialClass,
             medalImages: collectedData.medalImages,
             version: VERSION ? VERSION.label : null,
