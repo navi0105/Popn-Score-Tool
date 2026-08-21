@@ -34,6 +34,17 @@ In Jam&Fizz, `mu_lv.html?version=0` means "ALL versions" (the catalog-wide scrap
 
 Lesson: when adopting a query string from one site that has version-form-derived parameters, **don't assume parameter values are stable across releases**. Inspect the actual `<select>` HTML on each release to derive the right value, and encode it per-version in config (e.g. `SUPPORTED_VERSIONS[v].verAll`).
 
-## Future: mu_detail in High Cheers shows per-version scores
+## mu_detail in High Cheers shows per-version scores (implemented 2026-08)
 
-User noted that `mu_detail.html` in High Cheers displays both lifetime ("歴代") scores and current-version scores per difficulty. Whenever Deep Scrape (currently dev-only) is brought back, the detail parser must distinguish these two and store them separately — using only the version-current score for legacy class calc, and exposing the lifetime score for display.
+`mu_detail.html` in High Cheers displays both lifetime ("歴代") and current-version scores per difficulty. `parseDetailPageHC` now parses both tables (`section > table[0]` = 歴代, `table[1]` = VERSION); version scores are stored as separate chart fields (`versionScore` / `versionMedal` / `hcResolved`) and must never pass through `mergeEntry` (its "first real score wins" rule would corrupt lifetime data). The HC Pop'n Class formula (Top 20 new + Top 40 old, ssdh233/popn-class replica) consumes them.
+
+Caveats recorded during implementation:
+- The VERSION table has **no medal image** — the medal is inferred from クリア/FC/PERFECT counters (a / b / e / h tiers only). Fine-grained ◆/★ steps are approximated by keeping the lifetime medal when bonus tiers match.
+- Early-stop bound: candidates are fetched best-first by lifetime point, stopping when the 40th resolved point >= next candidate's lifetime point. A lifetime `easy_clear` (6250) whose version medal infers to `normal_clear` (12500) can make the version point slightly exceed the lifetime "upper bound" — same behavior as the reference; error magnitude is negligible (≲0.03 display points).
+- `meda_l` (assist clear, bonus 10000) exists in the medal alphabet but has no local sprite — text-chip fallback in viewer and canvas exports.
+
+## Viewer CSS: sticky table columns die under border-collapse + specificity traps
+
+Two hard-won facts from the 2026-08 viewer redesign:
+- `position: sticky` on `th`/`td` silently fails in Chromium when the table has `border-collapse: collapse` **or** any ancestor (including the table itself, e.g. `border-radius` + `overflow: hidden`) establishes overflow clipping. Fix: `border-collapse: separate; border-spacing: 0; overflow: visible` on the table inside the scrolling wrapper.
+- Single-class rules defined later in the stylesheet beat earlier equal-specificity rules: `.diff-ex { color: var(--ex) }` (text-color helper) silently overrode `.diff-chip { color: #fff }`, producing red-on-red chips. When one class styles text and another styles a chip background, give the chip rule higher specificity (`span.diff-chip`).
