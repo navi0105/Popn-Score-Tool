@@ -48,6 +48,7 @@
 
     var MEDAL_MAP = {
         'meda_none': 'no_play',
+        'meda_l': 'assist_clear',
         'meda_k': 'easy_clear',
         'meda_j': 'failed_1',
         'meda_i': 'failed_2',
@@ -573,6 +574,9 @@
      *   - div.item_st  play options
      */
     function parseDetailPage(doc) {
+        // Dispatch: High Cheers uses div.mu_detail_tb sections; Jam&Fizz div.dif_tbl.
+        if (doc.querySelector('div.mu_detail_tb')) return parseDetailPageHC(doc);
+
         var detail = {};
 
         var titleEl = doc.querySelector('#title');
@@ -653,6 +657,130 @@
             }
 
             detail[diffName] = chartDetail;
+        }
+
+        return detail;
+    }
+
+    /**
+     * Parse the High Cheers song detail page (mu_detail.html)
+     *
+     * Structure: div.mu_detail_tb#light / #normal / #hyper / #ex, each holding
+     * TWO tables — first the lifetime record (▼歴代: score row with medal/rank
+     * <img>s, judge counts, play counters), then the current-version record
+     * (▼VERSION: score + play/clear/FC/PERFECT counters only, no medal image).
+     * Cell values are '-' / '-回' when absent, 'N回' for counters.
+     *
+     * LIGHT is stored under 'easy' to match the charts data model. Each diff:
+     *   { score, medal, rank, cool, great, good, bad, highlight,
+     *     playCount, clearCount, fcCount, perfectCount, options,
+     *     version: { score, playCount, clearCount, fcCount, perfectCount } }
+     */
+    function parseHcCellNum(text) {
+        if (text == null) return null;
+        var t = String(text).trim();
+        if (t === '' || t === '-' || t === '-回') return null;
+        var n = parseInt(t.replace(/[^0-9]/g, ''), 10);
+        return isNaN(n) ? null : n;
+    }
+
+    function parseHcDetailTable(tbl) {
+        var out = {};
+        var rows = tbl.querySelectorAll('tr');
+        for (var ri = 0; ri < rows.length; ri++) {
+            var row = rows[ri];
+            var valEl = row.querySelector('td.play_value');
+            if (!valEl) continue;
+            var val = parseHcCellNum(valEl.textContent);
+            var label = row.firstElementChild ? row.firstElementChild.textContent.trim() : '';
+            if (row.classList.contains('score')) {
+                out.score = val;
+            } else if (label === 'COOL') {
+                out.cool = val;
+            } else if (label === 'GREAT') {
+                out.great = val;
+            } else if (label === 'GOOD') {
+                out.good = val;
+            } else if (label === 'BAD') {
+                out.bad = val;
+            } else if (label.indexOf('ハイライト') >= 0) {
+                out.highlight = val;
+            } else if (label.indexOf('プレー回数') >= 0) {
+                out.playCount = val;
+            } else if (label.indexOf('クリア回数') >= 0) {
+                out.clearCount = val;
+            } else if (label === 'FULL COMBO回数') {
+                out.fcCount = val;
+            } else if (label === 'PERFECT回数') {
+                out.perfectCount = val;
+            }
+        }
+        return out;
+    }
+
+    function parseDetailPageHC(doc) {
+        var detail = {};
+
+        var titleEl = doc.querySelector('#title');
+        if (titleEl) detail.title = titleEl.textContent.trim();
+
+        var artistEl = doc.querySelector('#artist');
+        if (artistEl) detail.artist = artistEl.textContent.trim();
+
+        var sections = ['light', 'normal', 'hyper', 'ex'];
+        for (var si = 0; si < sections.length; si++) {
+            var secName = sections[si];
+            var section = doc.querySelector('div.mu_detail_tb#' + secName);
+            if (!section) continue;
+
+            var chartDetail = {};
+            var tables = section.querySelectorAll('table');
+
+            if (tables[0]) {
+                var lifetime = parseHcDetailTable(tables[0]);
+                for (var k in lifetime) chartDetail[k] = lifetime[k];
+
+                // Medal & rank live as plain <img>s inside the lifetime score row
+                var medalTd = tables[0].querySelector('td.medal');
+                if (medalTd) {
+                    var imgs = medalTd.querySelectorAll('img');
+                    for (var ii = 0; ii < imgs.length; ii++) {
+                        var src = imgs[ii].getAttribute('src') || '';
+                        var mMatch = src.match(/meda_big_([a-z_]+)\.png/);
+                        if (mMatch) {
+                            var medalKey = 'meda_' + mMatch[1];
+                            chartDetail.medal = MEDAL_MAP[medalKey] || medalKey;
+                        }
+                        var rMatch = src.match(/rank_big_([a-z0-9_]+)\.png/);
+                        if (rMatch) {
+                            var rankKey = 'rank_' + rMatch[1];
+                            chartDetail.rank = RANK_MAP[rankKey] !== undefined ? RANK_MAP[rankKey] : rankKey;
+                        }
+                    }
+                }
+            }
+
+            if (tables[1]) {
+                var ver = parseHcDetailTable(tables[1]);
+                chartDetail.version = {
+                    score: ver.score,
+                    playCount: ver.playCount,
+                    clearCount: ver.clearCount,
+                    fcCount: ver.fcCount,
+                    perfectCount: ver.perfectCount,
+                };
+            }
+
+            var optEl = section.querySelector('div.item_st');
+            if (optEl) {
+                var optText = optEl.textContent.trim();
+                if (optText && optText.indexOf('オプション未保存') < 0) {
+                    chartDetail.options = optText.replace(/\s{2,}/g, ' ').trim();
+                }
+            }
+
+            // LIGHT occupies the legacy 'easy' slot in the charts data model
+            detail[secName === 'light' ? 'easy' : secName] = chartDetail;
         }
 
         return detail;
@@ -1117,6 +1245,159 @@
         return { value: avg, tier: tier, count: pts.length };
     }
 
+    // ========== High Cheers Pop'n Class (official per-chart formula) ==========
+    //
+    // Replicates https://github.com/ssdh233/popn-class (index-hc.js) bit-for-bit:
+    //   chart point (x60-scaled) =
+    //     floorTo(floorTo(level * (3750*level + bonus + (score-50000)) / 3881250, 8) * 60, 2)
+    //   total = floorTo(roundTo(sum(top20 new + top40 old points), 8) / 60, 2)
+    // New songs (version=29 catalog) use lifetime score directly (lifetime == version).
+    // Old songs must use CURRENT-VERSION score/medal from mu_detail.html.
+
+    function floorTo(x, p) {
+        var m = Math.pow(10, p);
+        return Math.floor(x * m) / m;
+    }
+
+    function roundTo(x, p) {
+        var m = Math.pow(10, p);
+        return Math.round(x * m) / m;
+    }
+
+    // Official medal-letter bonus table mapped onto our semantic medal names.
+    // a=21250, b/c/d=17500, e/f/g=12500, l=10000, k=6250, h/i/j/none=0.
+    function hcMedalBonus(medal) {
+        if (!medal) return 0;
+        if (medal === 'perfect') return 21250;
+        if (medal.indexOf('full_combo') === 0) return 17500;
+        if (medal.indexOf('normal_clear') === 0) return 12500;
+        if (medal === 'assist_clear') return 10000;
+        if (medal === 'easy_clear') return 6250;
+        return 0;
+    }
+
+    function calcHcChartPoint(level, score, medal) {
+        if (!level || level <= 0) return 0;
+        if (!score || score < 50000) return 0;
+        var inner = floorTo(level * (3750 * level + hcMedalBonus(medal) + (score - 50000)) / 3881250, 8);
+        return floorTo(inner * 60, 2);
+    }
+
+    // The VERSION table on mu_detail has no medal image — infer it from the
+    // clear/FC/PERFECT counters (mirrors the reference: a / b / e / h).
+    function inferVersionMedal(counts) {
+        if (!counts) return 'no_play';
+        if (counts.perfectCount > 0) return 'perfect';
+        if (counts.fcCount > 0) return 'full_combo';
+        if (counts.clearCount > 0) return 'normal_clear';
+        return 'failed_3';
+    }
+
+    // Effective medal for an old chart: keep the (more precise) lifetime medal
+    // when its bonus tier matches the inferred version medal, else trust the
+    // version medal. With useEC on, a lifetime EASY clear survives an uncleared
+    // version medal (the official game appears to honor it).
+    function effectiveHcMedal(histMedal, verMedal, useEC) {
+        if (useEC && histMedal === 'easy_clear' && hcMedalBonus(verMedal) === 0) return 'easy_clear';
+        return hcMedalBonus(verMedal) === hcMedalBonus(histMedal) ? histMedal : verMedal;
+    }
+
+    // x60-scaled sum -> display value (2dp, floor), matching the reference chain.
+    function hcSumToDisplay(entries) {
+        var sum = 0;
+        for (var i = 0; i < entries.length; i++) sum += entries[i].point;
+        return floorTo(roundTo(sum, 8) / 60, 2);
+    }
+
+    // Pick the top-40 old charts for a given EASY-clear toggle state.
+    // Entries carry both variants precomputed (point / pointEC).
+    function hcTop40Old(oldResolved, useEC) {
+        var list = oldResolved.map(function(e) {
+            return {
+                title: e.title, genre: e.genre, diff: e.diff, level: e.level,
+                score: e.versionScore, medal: useEC ? e.medalEC : e.medal,
+                lifetimeScore: e.lifetimeScore, lifetimeMedal: e.lifetimeMedal,
+                versionMedal: e.versionMedal,
+                point: useEC ? e.pointEC : e.point,
+            };
+        });
+        list.sort(function(a, b) { return b.point - a.point; });
+        return list.slice(0, 40);
+    }
+
+    /**
+     * Compute the HC-formula class from collected scores.
+     *
+     * Relies on per-chart fields written during scraping:
+     *   chart.isNew        — chart appears in the version=29 (new songs) catalog
+     *   chart.hcResolved   — mu_detail was fetched; versionScore/versionMedal valid
+     *   chart.versionScore — current-version score (0 if unplayed this version)
+     *   chart.versionMedal — inferred current-version medal
+     *
+     * Only NORMAL/HYPER/EX charts with a level participate (mu_lv scope — LIGHT
+     * and でっかポップ君 are outside the official formula, matching the reference).
+     */
+    function calcHcClass(scores, meta) {
+        var newCharts = [];
+        var oldResolved = [];
+        var diffs = ['normal', 'hyper', 'ex'];
+        for (var si = 0; si < scores.length; si++) {
+            var song = scores[si];
+            var charts = song.charts || {};
+            for (var di = 0; di < diffs.length; di++) {
+                var d = diffs[di];
+                var c = charts[d];
+                if (!c || !c.level) continue;
+                if (c.isNew) {
+                    var np = calcHcChartPoint(c.level, c.score || 0, c.medal);
+                    if (np > 0) {
+                        newCharts.push({
+                            title: song.title, genre: song.genre, diff: d,
+                            level: c.level, score: c.score || 0, medal: c.medal, point: np,
+                        });
+                    }
+                } else if (c.hcResolved) {
+                    var em = effectiveHcMedal(c.medal, c.versionMedal, false);
+                    var emEC = effectiveHcMedal(c.medal, c.versionMedal, true);
+                    oldResolved.push({
+                        title: song.title, genre: song.genre, diff: d,
+                        level: c.level,
+                        lifetimeScore: c.score || 0, lifetimeMedal: c.medal,
+                        versionScore: c.versionScore || 0, versionMedal: c.versionMedal,
+                        medal: em, point: calcHcChartPoint(c.level, c.versionScore || 0, em),
+                        medalEC: emEC, pointEC: calcHcChartPoint(c.level, c.versionScore || 0, emEC),
+                    });
+                }
+            }
+        }
+
+        newCharts.sort(function(a, b) { return b.point - a.point; });
+        var top20New = newCharts.slice(0, 20);
+        var top40Old = hcTop40Old(oldResolved, false);
+        var top40OldEC = hcTop40Old(oldResolved, true);
+
+        var newSum = hcSumToDisplay(top20New);
+        var oldSum = hcSumToDisplay(top40Old);
+        var oldSumEC = hcSumToDisplay(top40OldEC);
+
+        var result = {
+            value: hcSumToDisplay(top20New.concat(top40Old)),
+            valueEC: hcSumToDisplay(top20New.concat(top40OldEC)),
+            newSum: newSum, oldSum: oldSum, oldSumEC: oldSumEC,
+            top20New: top20New,
+            oldResolved: oldResolved,
+            newChartCount: newCharts.length,
+            resolvedCount: oldResolved.length,
+        };
+        if (meta) {
+            result.candidateCount = meta.candidateCount;
+            result.fetchedSongs = meta.fetchedSongs;
+            result.cutoffPoint = meta.cutoffPoint;
+            result.complete = meta.complete;
+        }
+        return result;
+    }
+
     // ========== Export ==========
 
     function exportJSON() {
@@ -1143,7 +1424,7 @@
     }
 
     var MEDAL_LABELS = {
-        'no_play': 'No Play', 'easy_clear': '\u7dd1\u2b24',
+        'no_play': 'No Play', 'assist_clear': 'ASSIST', 'easy_clear': '\u7dd1\u2b24',
         'failed_1': '\u7070\u2b24', 'failed_2': '\u7070\u25c6', 'failed_3': '\u7070\u2605',
         'normal_clear': '\u9285\u2b24', 'normal_clear_in_20_bad': '\u9285\u25c6', 'normal_clear_in_5_bad': '\u9285\u2605',
         'full_combo': '\u9280\u2b24', 'full_combo_in_20_good': '\u9280\u25c6', 'full_combo_in_5_good': '\u9280\u2605',
@@ -1151,7 +1432,7 @@
     };
 
     var MEDAL_COLORS = {
-        'no_play': '#bbb', 'easy_clear': '#2ea868',
+        'no_play': '#bbb', 'assist_clear': '#7fb8d8', 'easy_clear': '#2ea868',
         'failed_1': '#999', 'failed_2': '#999', 'failed_3': '#999',
         'normal_clear': '#b87333', 'normal_clear_in_20_bad': '#b87333', 'normal_clear_in_5_bad': '#b87333',
         'full_combo': '#888', 'full_combo_in_20_good': '#888', 'full_combo_in_5_good': '#888',
